@@ -1,8 +1,295 @@
 import { sql } from './db.js';
 import { getActiveSession } from './sessions.js';
-import { getUsers } from './users.js';
 
-// Build assignment plan for users
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+// Acquire lock with retry logic
+async function acquireLock(maxRetries = 5) {
+  const baseDelayMs = 100
+  
+  // Quick early check
+  const quickCheck = await sql`
+    SELECT currently_updating FROM assignment_timestamp WHERE id = 1
+  `
+  if (quickCheck.length > 0 && quickCheck[0].currently_updating === true) {
+    return { acquired: false, timestamp: null }
+  }
+  
+  let timestampValue = null
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const timestampCheck = await sql`
+      SELECT last_assigned_at, currently_updating FROM assignment_timestamp WHERE id = 1
+    `
+    
+    if (timestampCheck.length > 0 && timestampCheck[0].currently_updating === true) {
+      if (attempt < maxRetries - 1) {
+        const delayMs = baseDelayMs * Math.pow(2, attempt) + Math.random() * 50
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+        continue
+      }
+      return { acquired: false, timestamp: null }
+    }
+    
+    timestampValue = timestampCheck.length > 0 ? timestampCheck[0].last_assigned_at : null
+    
+    await sql`
+      INSERT INTO assignment_timestamp (id, last_assigned_at, currently_updating)
+      VALUES (1, NOW(), false)
+      ON CONFLICT (id) DO NOTHING
+    `
+    
+    const lockResult = timestampValue 
+      ? await sql`
+          UPDATE assignment_timestamp 
+          SET currently_updating = true
+          WHERE id = 1 
+            AND currently_updating = false
+            AND last_assigned_at = ${timestampValue}
+          RETURNING id, last_assigned_at, currently_updating
+        `
+      : await sql`
+          UPDATE assignment_timestamp 
+          SET currently_updating = true
+          WHERE id = 1 
+            AND currently_updating = false
+            AND last_assigned_at IS NULL
+          RETURNING id, last_assigned_at, currently_updating
+        `
+    
+    if (lockResult.length > 0 && lockResult[0].currently_updating === true) {
+      return { acquired: true, timestamp: timestampValue }
+    }
+    
+    if (attempt < maxRetries - 1) {
+      const delayMs = baseDelayMs * Math.pow(2, attempt) + Math.random() * 50
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+    }
+  }
+  
+  return { acquired: false, timestamp: null }
+}
+
+// Release lock
+async function releaseLock() {
+  try {
+    await sql`UPDATE assignment_timestamp SET currently_updating = false WHERE id = 1`
+  } catch (error) {
+    console.error('Error releasing lock:', error)
+  }
+}
+
+// Unassign all missions for given user IDs
+async function unassignUserMissions(userIds) {
+  await sql`
+    UPDATE book_missions
+    SET assigned_red = NULL,
+        assigned_blue = NULL,
+        red_completed = false,
+        blue_completed = false
+    WHERE assigned_red = ANY(${userIds}::integer[]) OR assigned_blue = ANY(${userIds}::integer[])
+  `
+  
+  await sql`
+    UPDATE passphrase_missions
+    SET assigned_receiver = NULL,
+        assigned_sender_1 = NULL,
+        assigned_sender_2 = NULL,
+        completed = false
+    WHERE assigned_receiver = ANY(${userIds}::integer[]) 
+       OR assigned_sender_1 = ANY(${userIds}::integer[])
+       OR assigned_sender_2 = ANY(${userIds}::integer[])
+  `
+  
+  await sql`
+    UPDATE object_missions
+    SET assigned_agent = NULL,
+        assigned_now = false,
+        completed = false
+    WHERE assigned_agent = ANY(${userIds}::integer[])
+  `
+}
+
+// Get total mission count for a user
+function getUserMissionCount(userId, userAssignments) {
+  const assignments = userAssignments.get(userId)
+  return assignments.books.length + assignments.passphrases.length + assignments.objects.length
+}
+
+// Get set of mission types a user has
+function getUserMissionTypes(userId, userAssignments) {
+  const assignments = userAssignments.get(userId)
+  const types = new Set()
+  if (assignments.books.length > 0) types.add('book')
+  if (assignments.passphrases.length > 0) types.add('passphrase')
+  if (assignments.objects.length > 0) types.add('object')
+  return types
+}
+
+// Get next mission type to assign (simplified diversity logic)
+function getNextMissionType(userId, userAssignments) {
+  const assignments = userAssignments.get(userId)
+  const total = getUserMissionCount(userId, userAssignments)
+  const types = getUserMissionTypes(userId, userAssignments)
+  
+  if (total === 0) return 'book'
+  if (total === 3) return null
+  
+  // If user has only one type, prioritize different type
+  if (types.size === 1) {
+    const currentType = Array.from(types)[0]
+    if (currentType === 'book') return 'passphrase'
+    if (currentType === 'passphrase') return 'object'
+    return 'book'
+  }
+  
+  // If user has 2 types, get the missing one
+  if (types.size === 2) {
+    const allTypes = ['book', 'passphrase', 'object']
+    const missing = allTypes.find(t => !types.has(t))
+    return missing || 'book'
+  }
+  
+  // User has all types, assign any
+  return 'book'
+}
+
+// ============================================================================
+// Assignment Logic
+// ============================================================================
+
+// Assign a book mission (requires red/blue pair)
+function assignBookMission(userId, availableMissions, userAssignments, users, redUsers, blueUsers) {
+  const userTeam = users.find(u => u.id === userId)?.team
+  if (!userTeam) return false
+  
+  const filtered = availableMissions.filter(m => {
+    const prevReds = Array.isArray(m.previous_reds) ? m.previous_reds : []
+    const prevBlues = Array.isArray(m.previous_blues) ? m.previous_blues : []
+    const userPrev = userTeam === 'red' ? prevReds : prevBlues
+    return !userPrev.includes(userId) && !m.assigned_red && !m.assigned_blue
+  })
+  
+  if (filtered.length === 0) return false
+  
+  // Sort by previous assignments (prefer missions with fewer previous assignments)
+  filtered.sort((a, b) => {
+    const aPrev = (Array.isArray(a.previous_reds) ? a.previous_reds.length : 0) + 
+                  (Array.isArray(a.previous_blues) ? a.previous_blues.length : 0)
+    const bPrev = (Array.isArray(b.previous_reds) ? b.previous_reds.length : 0) + 
+                  (Array.isArray(b.previous_blues) ? b.previous_blues.length : 0)
+    return aPrev - bPrev
+  })
+  
+  const partnerTeam = userTeam === 'red' ? 'blue' : 'red'
+  const partnerPool = partnerTeam === 'red' ? redUsers : blueUsers
+  
+  for (const mission of filtered) {
+    const partnerPrev = userTeam === 'red' 
+      ? (Array.isArray(mission.previous_blues) ? mission.previous_blues : [])
+      : (Array.isArray(mission.previous_reds) ? mission.previous_reds : [])
+    
+    const availablePartners = partnerPool
+      .map(partnerId => ({ partnerId, total: getUserMissionCount(partnerId, userAssignments) }))
+      .filter(p => p.total < 3 && !partnerPrev.includes(p.partnerId))
+      .sort((a, b) => a.total - b.total)
+    
+    if (availablePartners.length > 0) {
+      const partner = availablePartners[0].partnerId
+      const assignments = userAssignments.get(userId)
+      const partnerAssignments = userAssignments.get(partner)
+      
+      assignments.books.push({ missionId: mission.id, partnerId: partner })
+      partnerAssignments.books.push({ missionId: mission.id, partnerId: userId })
+      mission.assigned_red = userTeam === 'red' ? userId : partner
+      mission.assigned_blue = userTeam === 'blue' ? userId : partner
+      return true
+    }
+  }
+  
+  return false
+}
+
+// Assign a passphrase mission (requires receiver + 2 senders)
+function assignPassphraseMission(userId, availableMissions, userAssignments, allUsers) {
+  const filtered = availableMissions.filter(m => {
+    const prevReceivers = Array.isArray(m.previous_receivers) ? m.previous_receivers : []
+    const prevSenders = Array.isArray(m.previous_senders) ? m.previous_senders : []
+    return !prevReceivers.includes(userId) && !prevSenders.includes(userId) &&
+           !m.assigned_receiver && !m.assigned_sender_1 && !m.assigned_sender_2
+  })
+  
+  if (filtered.length === 0) return false
+  
+  // Sort by previous assignments
+  filtered.sort((a, b) => {
+    const aPrev = (Array.isArray(a.previous_receivers) ? a.previous_receivers.length : 0) + 
+                  (Array.isArray(a.previous_senders) ? a.previous_senders.length : 0)
+    const bPrev = (Array.isArray(b.previous_receivers) ? b.previous_receivers.length : 0) + 
+                  (Array.isArray(b.previous_senders) ? b.previous_senders.length : 0)
+    return aPrev - bPrev
+  })
+  
+  for (const mission of filtered) {
+    const prevReceivers = Array.isArray(mission.previous_receivers) ? mission.previous_receivers : []
+    const prevSenders = Array.isArray(mission.previous_senders) ? mission.previous_senders : []
+    
+    const availableSenders = allUsers
+      .map(senderId => ({ senderId, total: getUserMissionCount(senderId, userAssignments) }))
+      .filter(p => p.senderId !== userId && p.total < 3 &&
+                   !prevReceivers.includes(p.senderId) && !prevSenders.includes(p.senderId))
+      .sort((a, b) => a.total - b.total)
+    
+    if (availableSenders.length >= 2) {
+      const sender1 = availableSenders[0].senderId
+      const sender2 = availableSenders[1].senderId
+      
+      const assignments = userAssignments.get(userId)
+      const sender1Assignments = userAssignments.get(sender1)
+      const sender2Assignments = userAssignments.get(sender2)
+      
+      assignments.passphrases.push({ missionId: mission.id, sender1Id: sender1, sender2Id: sender2 })
+      sender1Assignments.passphrases.push({ missionId: mission.id, receiverId: userId, isSender: true })
+      sender2Assignments.passphrases.push({ missionId: mission.id, receiverId: userId, isSender: true })
+      mission.assigned_receiver = userId
+      mission.assigned_sender_1 = sender1
+      mission.assigned_sender_2 = sender2
+      return true
+    }
+  }
+  
+  return false
+}
+
+// Assign an object mission
+function assignObjectMission(userId, availableMissions, userAssignments) {
+  const filtered = availableMissions.filter(m => {
+    const prev = Array.isArray(m.past_assigned_agents) ? m.past_assigned_agents : []
+    return !prev.includes(userId) && !m.assigned_agent
+  })
+  
+  if (filtered.length === 0) return false
+  
+  // Sort by previous assignments
+  filtered.sort((a, b) => {
+    const aPrev = Array.isArray(a.past_assigned_agents) ? a.past_assigned_agents.length : 0
+    const bPrev = Array.isArray(b.past_assigned_agents) ? b.past_assigned_agents.length : 0
+    return aPrev - bPrev
+  })
+  
+  const mission = filtered[0]
+  const assignments = userAssignments.get(userId)
+  assignments.objects.push({ missionId: mission.id })
+  mission.assigned_agent = userId
+  return true
+}
+
+// ============================================================================
+// Main Assignment Plan Builder
+// ============================================================================
+
 export async function buildAssignmentPlan(userIdsArray) {
   // Get users with their teams
   const users = await sql`
@@ -17,7 +304,7 @@ export async function buildAssignmentPlan(userIdsArray) {
   const blueUsers = users.filter(u => u.team === 'blue').map(u => u.id)
   const allUsers = users.map(u => u.id)
   
-  // Load all available missions
+  // Load all available missions (exclude completed ones)
   const bookMissions = await sql`
     SELECT id, previous_reds, previous_blues FROM book_missions 
     WHERE assigned_red IS NULL AND assigned_blue IS NULL
@@ -39,104 +326,10 @@ export async function buildAssignmentPlan(userIdsArray) {
   `
 
   // Track assignments per user
-  const userAssignments = new Map() // userId -> { books: [], passphrases: [], objects: [] }
+  const userAssignments = new Map()
   allUsers.forEach(userId => {
     userAssignments.set(userId, { books: [], passphrases: [], objects: [] })
   })
-  
-  // Helper to check if user has had this mission before
-  const userHadBookMission = (userId, mission) => {
-    const prevReds = Array.isArray(mission.previous_reds) ? mission.previous_reds : []
-    const prevBlues = Array.isArray(mission.previous_blues) ? mission.previous_blues : []
-    const userTeam = users.find(u => u.id === userId)?.team
-    return userTeam === 'red' ? prevReds.includes(userId) : prevBlues.includes(userId)
-  }
-
-  const userHadPassphraseMission = (userId, mission) => {
-    const prevReceivers = Array.isArray(mission.previous_receivers) ? mission.previous_receivers : []
-    const prevSenders = Array.isArray(mission.previous_senders) ? mission.previous_senders : []
-    return prevReceivers.includes(userId) || prevSenders.includes(userId)
-  }
-
-  const userHadObjectMission = (userId, mission) => {
-    const prev = Array.isArray(mission.past_assigned_agents) ? mission.past_assigned_agents : []
-    return prev.includes(userId)
-  }
-
-  // Helper to get needed mission type for a user (deterministic, prioritizes diversity)
-  const getNeededMissionType = (userId) => {
-    const assignments = userAssignments.get(userId)
-    const total = assignments.books.length + assignments.passphrases.length + assignments.objects.length
-    const types = []
-    if (assignments.books.length > 0) types.push('book')
-    if (assignments.passphrases.length > 0) types.push('passphrase')
-    if (assignments.objects.length > 0) types.push('object')
-    const uniqueTypes = new Set(types)
-    
-    if (total === 0) {
-      return 'book' // Start with book missions
-    } else if (total === 1) {
-      const usedType = types[0]
-      if (usedType === 'book') return 'passphrase'
-      if (usedType === 'passphrase') return 'object'
-      return 'book'
-    } else if (total === 2) {
-      if (uniqueTypes.size === 1) {
-        const currentType = types[0]
-        if (currentType === 'book') return 'passphrase'
-        if (currentType === 'passphrase') return 'object'
-        return 'book'
-      } else {
-        const missingTypes = ['book', 'passphrase', 'object'].filter(t => !types.includes(t))
-        if (missingTypes.length > 0) return missingTypes[0]
-        return 'object'
-      }
-    }
-    return null // User has 3 missions
-  }
-
-  // Helper to check if user needs a specific type for diversity
-  const needsTypeForDiversity = (userId) => {
-    const assignments = userAssignments.get(userId)
-    const total = assignments.books.length + assignments.passphrases.length + assignments.objects.length
-    const bookCount = assignments.books.length
-    const passphraseCount = assignments.passphrases.length
-    const objectCount = assignments.objects.length
-    
-    const uniqueTypes = new Set()
-    if (bookCount > 0) uniqueTypes.add('book')
-    if (passphraseCount > 0) uniqueTypes.add('passphrase')
-    if (objectCount > 0) uniqueTypes.add('object')
-    
-    if (total === 0) {
-      return ['book', 'passphrase', 'object']
-    }
-    
-    if (total === 1) {
-      if (bookCount > 0) return ['passphrase', 'object']
-      if (passphraseCount > 0) return ['book', 'object']
-      if (objectCount > 0) return ['book', 'passphrase']
-    }
-    
-    if (total === 2) {
-      if (uniqueTypes.size === 1) {
-        if (bookCount === 2) return ['passphrase', 'object']
-        if (passphraseCount === 2) return ['book', 'object']
-        if (objectCount === 2) return ['book', 'passphrase']
-      }
-      if (uniqueTypes.size === 2) {
-        return ['book', 'passphrase', 'object']
-      }
-    }
-    
-    return []
-  }
-  
-  // Helper to count missions for a user (all roles count)
-  const countUserMissions = (userId) => {
-    const assignments = userAssignments.get(userId)
-    return assignments.books.length + assignments.passphrases.length + assignments.objects.length
-  }
   
   // Assign missions until all users have exactly 3 missions
   let iterations = 0
@@ -144,151 +337,32 @@ export async function buildAssignmentPlan(userIdsArray) {
   
   while (iterations < maxIterations) {
     const usersNeedingMissions = allUsers
-      .map(userId => ({ userId, total: countUserMissions(userId) }))
+      .map(userId => ({ userId, total: getUserMissionCount(userId, userAssignments) }))
       .filter(u => u.total < 3)
       .sort((a, b) => a.total - b.total)
     
-    if (usersNeedingMissions.length === 0) {
-      break
-    }
+    if (usersNeedingMissions.length === 0) break
     
     let anyAssignment = false
     
     for (const { userId } of usersNeedingMissions) {
-      const assignments = userAssignments.get(userId)
-      const total = countUserMissions(userId)
+      if (getUserMissionCount(userId, userAssignments) >= 3) continue
       
-      if (total >= 3) continue
-      
-      const neededTypes = needsTypeForDiversity(userId)
-      const neededType = getNeededMissionType(userId)
-      const typesToTry = neededType && neededTypes.includes(neededType) 
-        ? [neededType, ...neededTypes.filter(t => t !== neededType)]
-        : neededTypes
+      const nextType = getNextMissionType(userId, userAssignments)
+      if (!nextType) continue
       
       let assigned = false
       
-      for (const typeToTry of typesToTry) {
-        if (assigned || countUserMissions(userId) >= 3) break
-        
-        if (typeToTry === 'book') {
-          const userTeam = users.find(u => u.id === userId)?.team
-          if (!userTeam) continue
-          
-          const availableMissions = bookMissions.filter(m => {
-            if (userHadBookMission(userId, m)) return false
-            if (m.assigned_red || m.assigned_blue) return false
-            return true
-          })
-          
-          if (availableMissions.length > 0) {
-            availableMissions.sort((a, b) => {
-              const aPrev = (Array.isArray(a.previous_reds) ? a.previous_reds.length : 0) + 
-                            (Array.isArray(a.previous_blues) ? a.previous_blues.length : 0)
-              const bPrev = (Array.isArray(b.previous_reds) ? b.previous_reds.length : 0) + 
-                            (Array.isArray(b.previous_blues) ? b.previous_blues.length : 0)
-              return aPrev - bPrev
-            })
-            
-            for (const mission of availableMissions) {
-              const partnerTeam = userTeam === 'red' ? 'blue' : 'red'
-              const partnerPool = partnerTeam === 'red' ? redUsers : blueUsers
-              
-              const availablePartners = partnerPool
-                .map(partnerId => ({ partnerId, total: countUserMissions(partnerId) }))
-                .filter(p => {
-                  if (p.total >= 3) return false
-                  const prev = userTeam === 'red' 
-                    ? (Array.isArray(mission.previous_blues) ? mission.previous_blues : [])
-                    : (Array.isArray(mission.previous_reds) ? mission.previous_reds : [])
-                  return !prev.includes(p.partnerId)
-                })
-                .sort((a, b) => a.total - b.total)
-              
-              if (availablePartners.length > 0) {
-                const partner = availablePartners[0].partnerId
-                const partnerTotal = countUserMissions(partner)
-                
-                if (partnerTotal < 3) {
-                  assignments.books.push({ missionId: mission.id, partnerId: partner })
-                  userAssignments.get(partner).books.push({ missionId: mission.id, partnerId: userId })
-                  mission.assigned_red = userTeam === 'red' ? userId : partner
-                  mission.assigned_blue = userTeam === 'blue' ? userId : partner
-                  assigned = true
-                  anyAssignment = true
-                  break
-                }
-              }
-            }
-          }
-        } else if (typeToTry === 'passphrase') {
-          const availableMissions = passphraseMissions.filter(m => {
-            if (userHadPassphraseMission(userId, m)) return false
-            if (m.assigned_receiver || m.assigned_sender_1 || m.assigned_sender_2) return false
-            return true
-          })
-          
-          if (availableMissions.length > 0) {
-            availableMissions.sort((a, b) => {
-              const aPrev = (Array.isArray(a.previous_receivers) ? a.previous_receivers.length : 0) + 
-                            (Array.isArray(a.previous_senders) ? a.previous_senders.length : 0)
-              const bPrev = (Array.isArray(b.previous_receivers) ? b.previous_receivers.length : 0) + 
-                            (Array.isArray(b.previous_senders) ? b.previous_senders.length : 0)
-              return aPrev - bPrev
-            })
-            
-            for (const mission of availableMissions) {
-              const availableSenders = allUsers
-                .map(senderId => ({ senderId, total: countUserMissions(senderId) }))
-                .filter(p => {
-                  if (p.senderId === userId || p.total >= 3) return false
-                  const prevReceivers = Array.isArray(mission.previous_receivers) ? mission.previous_receivers : []
-                  const prevSenders = Array.isArray(mission.previous_senders) ? mission.previous_senders : []
-                  return !prevReceivers.includes(p.senderId) && !prevSenders.includes(p.senderId)
-                })
-                .sort((a, b) => a.total - b.total)
-              
-              if (availableSenders.length >= 2) {
-                const sender1 = availableSenders[0].senderId
-                const sender2 = availableSenders[1].senderId
-                const sender1Total = countUserMissions(sender1)
-                const sender2Total = countUserMissions(sender2)
-                
-                if (sender1Total < 3 && sender2Total < 3) {
-                  assignments.passphrases.push({ missionId: mission.id, sender1Id: sender1, sender2Id: sender2 })
-                  userAssignments.get(sender1).passphrases.push({ missionId: mission.id, receiverId: userId, isSender: true })
-                  userAssignments.get(sender2).passphrases.push({ missionId: mission.id, receiverId: userId, isSender: true })
-                  mission.assigned_receiver = userId
-                  mission.assigned_sender_1 = sender1
-                  mission.assigned_sender_2 = sender2
-                  assigned = true
-                  anyAssignment = true
-                  break
-                }
-              }
-            }
-          }
-        } else if (typeToTry === 'object') {
-          const availableMissions = objectMissions.filter(m => {
-            if (userHadObjectMission(userId, m)) return false
-            if (m.assigned_agent) return false
-            return true
-          })
-          
-          if (availableMissions.length > 0) {
-            availableMissions.sort((a, b) => {
-              const aPrev = Array.isArray(a.past_assigned_agents) ? a.past_assigned_agents.length : 0
-              const bPrev = Array.isArray(b.past_assigned_agents) ? b.past_assigned_agents.length : 0
-              return aPrev - bPrev
-            })
-            
-            const mission = availableMissions[0]
-            assignments.objects.push({ missionId: mission.id })
-            mission.assigned_agent = userId
-            assigned = true
-            anyAssignment = true
-          }
-        }
+      if (nextType === 'book') {
+        assigned = assignBookMission(userId, bookMissions, userAssignments, users, redUsers, blueUsers)
+      } else if (nextType === 'passphrase') {
+        assigned = assignPassphraseMission(userId, passphraseMissions, userAssignments, allUsers)
+      } else if (nextType === 'object') {
+        assigned = assignObjectMission(userId, objectMissions, userAssignments)
+      }
+      
+      if (assigned) {
+        anyAssignment = true
       }
     }
     
@@ -306,7 +380,7 @@ export async function buildAssignmentPlan(userIdsArray) {
     objects: []
   }
   
-  // Collect all book assignments (avoid duplicates by mission ID)
+  // Collect book assignments (avoid duplicates)
   const bookAssignmentsSet = new Set()
   for (const [userId, assignments] of userAssignments) {
     for (const book of assignments.books) {
@@ -323,7 +397,7 @@ export async function buildAssignmentPlan(userIdsArray) {
     }
   }
   
-  // Collect all passphrase assignments (avoid duplicates by mission ID)
+  // Collect passphrase assignments (avoid duplicates)
   const passphraseAssignmentsSet = new Set()
   for (const [userId, assignments] of userAssignments) {
     for (const passphrase of assignments.passphrases) {
@@ -342,7 +416,7 @@ export async function buildAssignmentPlan(userIdsArray) {
     }
   }
   
-  // Collect all object assignments
+  // Collect object assignments
   for (const [userId, assignments] of userAssignments) {
     for (const object of assignments.objects) {
       plan.objects.push({
@@ -355,82 +429,81 @@ export async function buildAssignmentPlan(userIdsArray) {
   return plan
 }
 
-// Validates an assignment plan
+// ============================================================================
+// Validation
+// ============================================================================
+
 export function validateAssignmentPlan(plan, userIdsArray) {
   const errors = []
-  const userCounts = new Map()
-  const userTypes = new Map()
+  const userStats = new Map()
   
   userIdsArray.forEach(userId => {
-    userCounts.set(userId, 0)
-    userTypes.set(userId, { books: 0, passphrases: 0, objects: 0 })
+    userStats.set(userId, { count: 0, types: new Set() })
   })
   
-  // Count book assignments
+  // Count assignments in a single pass
   for (const book of plan.books) {
     if (book.redUserId) {
-      const count = userCounts.get(book.redUserId) || 0
-      userCounts.set(book.redUserId, count + 1)
-      const types = userTypes.get(book.redUserId) || { books: 0, passphrases: 0, objects: 0 }
-      types.books++
-      userTypes.set(book.redUserId, types)
+      const stats = userStats.get(book.redUserId)
+      if (stats) {
+        stats.count++
+        stats.types.add('book')
+      }
     }
     if (book.blueUserId) {
-      const count = userCounts.get(book.blueUserId) || 0
-      userCounts.set(book.blueUserId, count + 1)
-      const types = userTypes.get(book.blueUserId) || { books: 0, passphrases: 0, objects: 0 }
-      types.books++
-      userTypes.set(book.blueUserId, types)
+      const stats = userStats.get(book.blueUserId)
+      if (stats) {
+        stats.count++
+        stats.types.add('book')
+      }
     }
   }
   
-  // Count passphrase assignments
   for (const passphrase of plan.passphrases) {
     if (passphrase.receiverId) {
-      const count = userCounts.get(passphrase.receiverId) || 0
-      userCounts.set(passphrase.receiverId, count + 1)
-      const types = userTypes.get(passphrase.receiverId) || { books: 0, passphrases: 0, objects: 0 }
-      types.passphrases++
-      userTypes.set(passphrase.receiverId, types)
+      const stats = userStats.get(passphrase.receiverId)
+      if (stats) {
+        stats.count++
+        stats.types.add('passphrase')
+      }
     }
     if (passphrase.sender1Id) {
-      const count = userCounts.get(passphrase.sender1Id) || 0
-      userCounts.set(passphrase.sender1Id, count + 1)
-      const types = userTypes.get(passphrase.sender1Id) || { books: 0, passphrases: 0, objects: 0 }
-      types.passphrases++
-      userTypes.set(passphrase.sender1Id, types)
+      const stats = userStats.get(passphrase.sender1Id)
+      if (stats) {
+        stats.count++
+        stats.types.add('passphrase')
+      }
     }
     if (passphrase.sender2Id) {
-      const count = userCounts.get(passphrase.sender2Id) || 0
-      userCounts.set(passphrase.sender2Id, count + 1)
-      const types = userTypes.get(passphrase.sender2Id) || { books: 0, passphrases: 0, objects: 0 }
-      types.passphrases++
-      userTypes.set(passphrase.sender2Id, types)
+      const stats = userStats.get(passphrase.sender2Id)
+      if (stats) {
+        stats.count++
+        stats.types.add('passphrase')
+      }
     }
   }
   
-  // Count object assignments
   for (const object of plan.objects) {
     if (object.agentId) {
-      const count = userCounts.get(object.agentId) || 0
-      userCounts.set(object.agentId, count + 1)
-      const types = userTypes.get(object.agentId) || { books: 0, passphrases: 0, objects: 0 }
-      types.objects++
-      userTypes.set(object.agentId, types)
+      const stats = userStats.get(object.agentId)
+      if (stats) {
+        stats.count++
+        stats.types.add('object')
+      }
     }
   }
   
-  // Validate counts
+  // Validate counts and diversity
   for (const userId of userIdsArray) {
-    const count = userCounts.get(userId) || 0
-    if (count !== 3) {
-      errors.push(`User ${userId} has ${count} missions (expected 3)`)
+    const stats = userStats.get(userId)
+    if (!stats) continue
+    
+    if (stats.count !== 3) {
+      errors.push(`User ${userId} has ${stats.count} missions (expected 3)`)
     }
     
-    const types = userTypes.get(userId) || { books: 0, passphrases: 0, objects: 0 }
-    const typeCount = (types.books > 0 ? 1 : 0) + (types.passphrases > 0 ? 1 : 0) + (types.objects > 0 ? 1 : 0)
-    if (typeCount < 2 && count === 3) {
-      errors.push(`User ${userId} has ${count} missions but only ${typeCount} different types (need at least 2)`)
+    if (stats.count === 3 && stats.types.size < 2) {
+      errors.push(`User ${userId} has ${stats.count} missions but only ${stats.types.size} different types (need at least 2)`)
     }
   }
   
@@ -440,11 +513,11 @@ export function validateAssignmentPlan(plan, userIdsArray) {
   }
 }
 
-// Executes an assignment plan atomically using CTE-based batch updates
+// ============================================================================
+// Execution
+// ============================================================================
+
 export async function executeAssignmentPlan(plan, userIdsArray, expectedTimestamp = null) {
-  const execId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-  console.log(`[${execId}] executeAssignmentPlan called with ${plan.books.length} books, ${plan.passphrases.length} passphrases, ${plan.objects.length} objects`)
-  
   // Verify lock is still held
   const lockCheck = await sql`
     SELECT currently_updating FROM assignment_timestamp WHERE id = 1
@@ -548,178 +621,40 @@ export async function executeAssignmentPlan(plan, userIdsArray, expectedTimestam
   }
 }
 
-// Reset all missions and assign until each user has 3 missions total
-export async function resetAndAssignAllMissions() {
-  const functionCallId = `reset-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-  console.log(`[${functionCallId}] resetAndAssignAllMissions called`)
-  
-  let lockAcquired = false
-  const maxLockRetries = 5
-  const baseDelayMs = 100
-  
-  try {
-    // Quick early check - if lock is held, return immediately
-    const quickCheck = await sql`
-      SELECT currently_updating FROM assignment_timestamp WHERE id = 1
-    `
-    if (quickCheck.length > 0 && quickCheck[0].currently_updating === true) {
-      return { assigned: 0, reason: 'Lock already held' }
-    }
-    
-    const activeSession = await getActiveSession()
-    if (!activeSession) {
-      throw new Error('No active session. Cannot assign missions.')
-    }
-    
-    const sessionUserIds = activeSession.participant_user_ids || []
-    if (sessionUserIds.length === 0) {
-      throw new Error('No participants in active session')
-    }
-    
-    // Try to acquire lock with retry logic
-    let lockResult = null
-    let timestampValue = null
-    
-    for (let attempt = 0; attempt < maxLockRetries; attempt++) {
-      const timestampCheck = await sql`
-        SELECT last_assigned_at, currently_updating FROM assignment_timestamp WHERE id = 1
-      `
-      
-      if (timestampCheck.length > 0 && timestampCheck[0].currently_updating === true) {
-        if (attempt < maxLockRetries - 1) {
-          const delayMs = baseDelayMs * Math.pow(2, attempt) + Math.random() * 50
-          await new Promise(resolve => setTimeout(resolve, delayMs))
-          continue
-        } else {
-          return { assigned: 0, reason: 'Lock held after retries' }
-        }
-      }
-      
-      timestampValue = timestampCheck.length > 0 ? timestampCheck[0].last_assigned_at : null
-      
-      await sql`
-        INSERT INTO assignment_timestamp (id, last_assigned_at, currently_updating)
-        VALUES (1, NOW(), false)
-        ON CONFLICT (id) DO NOTHING
-      `
-      
-      lockResult = timestampValue 
-        ? await sql`
-            UPDATE assignment_timestamp 
-            SET currently_updating = true
-            WHERE id = 1 
-              AND currently_updating = false
-              AND last_assigned_at = ${timestampValue}
-            RETURNING id, last_assigned_at, currently_updating
-          `
-        : await sql`
-            UPDATE assignment_timestamp 
-            SET currently_updating = true
-            WHERE id = 1 
-              AND currently_updating = false
-              AND last_assigned_at IS NULL
-            RETURNING id, last_assigned_at, currently_updating
-          `
-      
-      if (lockResult.length > 0 && lockResult[0].currently_updating === true) {
-        lockAcquired = true
-        break
-      }
-      
-      if (attempt < maxLockRetries - 1) {
-        const delayMs = baseDelayMs * Math.pow(2, attempt) + Math.random() * 50
-        await new Promise(resolve => setTimeout(resolve, delayMs))
-      }
-    }
-    
-    if (!lockAcquired || !lockResult || lockResult.length === 0) {
-      return { assigned: 0, reason: 'Failed to acquire lock after retries' }
-    }
-    
-    // Unassign all missions for session users BEFORE building plan
-    await sql`
-      UPDATE book_missions
-      SET assigned_red = NULL,
-          assigned_blue = NULL,
-          red_completed = false,
-          blue_completed = false
-      WHERE assigned_red = ANY(${sessionUserIds}::integer[]) OR assigned_blue = ANY(${sessionUserIds}::integer[])
-    `
-    
-    await sql`
-      UPDATE passphrase_missions
-      SET assigned_receiver = NULL,
-          assigned_sender_1 = NULL,
-          assigned_sender_2 = NULL,
-          completed = false
-      WHERE assigned_receiver = ANY(${sessionUserIds}::integer[]) 
-         OR assigned_sender_1 = ANY(${sessionUserIds}::integer[])
-         OR assigned_sender_2 = ANY(${sessionUserIds}::integer[])
-    `
-    
-    await sql`
-      UPDATE object_missions
-      SET assigned_agent = NULL,
-          assigned_now = false,
-          completed = false
-      WHERE assigned_agent = ANY(${sessionUserIds}::integer[])
-    `
-    
-    // Build and validate assignment plan
-    let plan = null
-    let validation = null
-    const maxPlanRetries = 50
-    let retryCount = 0
-    
-    while (retryCount < maxPlanRetries) {
-      plan = await buildAssignmentPlan(sessionUserIds)
-      validation = validateAssignmentPlan(plan, sessionUserIds)
-      
-      if (validation.valid) {
-        break
-      }
-      
-      retryCount++
-      if (retryCount >= maxPlanRetries) {
-        throw new Error(`Assignment plan invalid after ${maxPlanRetries} attempts: ${validation.errors.join(', ')}`)
-      }
-    }
-    
-    const totalMissions = plan.books.length + plan.passphrases.length + plan.objects.length
-    
-    // Execute plan
-    await executeAssignmentPlan(plan, sessionUserIds, timestampValue)
-    
-    // Update timestamp BEFORE releasing lock
-    await updateAssignmentTimestamp()
-    
-    return {
-      success: true,
-      assigned: totalMissions,
-      usersAssigned: sessionUserIds.length
-    }
-  } catch (error) {
-    console.error(`[${functionCallId}] Error in resetAndAssignAllMissions:`, error)
-    throw error
-  } finally {
-    if (lockAcquired) {
-      try {
-        await sql`UPDATE assignment_timestamp SET currently_updating = false WHERE id = 1`
-      } catch (clearError) {
-        console.error(`[${functionCallId}] Error clearing currently_updating flag:`, clearError)
-      }
-    }
-  }
-}
+// ============================================================================
+// Main Assignment Functions
+// ============================================================================
 
-// Assign missions to users (internal helper function)
-export async function assignMissionsToSessionUsers(userIdsArray) {
+// Unified function to assign missions (replaces both resetAndAssignAllMissions and assignMissionsToSessionUsers)
+async function assignMissions(userIds, options = {}) {
+  const { getUsersFromSession = false } = options
+  const functionCallId = `assign-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  
   let lockAcquired = false
+  
   try {
-    const timestampBefore = await sql`
-      SELECT last_assigned_at FROM assignment_timestamp WHERE id = 1
-    `
-    const timestampValue = timestampBefore.length > 0 ? timestampBefore[0].last_assigned_at : null
+    // Get user IDs
+    let finalUserIds = userIds
+    if (getUsersFromSession) {
+      const activeSession = await getActiveSession()
+      if (!activeSession) {
+        throw new Error('No active session. Cannot assign missions.')
+      }
+      finalUserIds = activeSession.participant_user_ids || []
+      if (finalUserIds.length === 0) {
+        throw new Error('No participants in active session')
+      }
+    }
+    
+    // Acquire lock
+    const lockResult = await acquireLock()
+    if (!lockResult.acquired) {
+      return { success: false, assigned: 0, reason: 'Failed to acquire lock' }
+    }
+    lockAcquired = true
+    
+    // Unassign all missions for users
+    await unassignUserMissions(finalUserIds)
     
     // Build and validate assignment plan
     let plan = null
@@ -728,8 +663,8 @@ export async function assignMissionsToSessionUsers(userIdsArray) {
     let retryCount = 0
     
     while (retryCount < maxRetries) {
-      plan = await buildAssignmentPlan(userIdsArray)
-      validation = validateAssignmentPlan(plan, userIdsArray)
+      plan = await buildAssignmentPlan(finalUserIds)
+      validation = validateAssignmentPlan(plan, finalUserIds)
       
       if (validation.valid) {
         break
@@ -741,89 +676,44 @@ export async function assignMissionsToSessionUsers(userIdsArray) {
       }
     }
     
-    await sql`
-      INSERT INTO assignment_timestamp (id, last_assigned_at, currently_updating)
-      VALUES (1, NOW(), false)
-      ON CONFLICT (id) DO NOTHING
-    `
+    const totalMissions = plan.books.length + plan.passphrases.length + plan.objects.length
     
-    const lockResult = timestampValue 
-      ? await sql`
-          UPDATE assignment_timestamp 
-          SET currently_updating = true
-          WHERE id = 1 
-            AND currently_updating = false
-            AND last_assigned_at = ${timestampValue}
-          RETURNING id, last_assigned_at, currently_updating
-        `
-      : await sql`
-          UPDATE assignment_timestamp 
-          SET currently_updating = true
-          WHERE id = 1 
-            AND currently_updating = false
-            AND last_assigned_at IS NULL
-          RETURNING id, last_assigned_at, currently_updating
-        `
+    // Execute plan
+    await executeAssignmentPlan(plan, finalUserIds, lockResult.timestamp)
     
-    if (lockResult.length === 0 || !lockResult[0].currently_updating) {
-      return { success: false, assigned: 0 }
-    }
-    
-    lockAcquired = true
-    
-    // Unassign all missions for selected users
-    await sql`
-      UPDATE book_missions
-      SET assigned_red = NULL,
-          assigned_blue = NULL,
-          red_completed = false,
-          blue_completed = false
-      WHERE assigned_red = ANY(${userIdsArray}::integer[]) OR assigned_blue = ANY(${userIdsArray}::integer[])
-    `
-    
-    await sql`
-      UPDATE passphrase_missions
-      SET assigned_receiver = NULL,
-          assigned_sender_1 = NULL,
-          assigned_sender_2 = NULL,
-          completed = false
-      WHERE assigned_receiver = ANY(${userIdsArray}::integer[]) 
-         OR assigned_sender_1 = ANY(${userIdsArray}::integer[])
-         OR assigned_sender_2 = ANY(${userIdsArray}::integer[])
-    `
-    
-    await sql`
-      UPDATE object_missions
-      SET assigned_agent = NULL,
-          assigned_now = false,
-          completed = false
-      WHERE assigned_agent = ANY(${userIdsArray}::integer[])
-    `
-    
-    await executeAssignmentPlan(plan, userIdsArray, timestampValue)
+    // Update timestamp
     await updateAssignmentTimestamp()
     
-    const totalMissions = plan.books.length + plan.passphrases.length + plan.objects.length
     return {
       success: true,
-      usersAssigned: userIdsArray.length,
+      assigned: totalMissions,
+      usersAssigned: finalUserIds.length,
       missionsAssigned: totalMissions
     }
   } catch (error) {
-    console.error('Error assigning missions to session users:', error)
+    console.error(`[${functionCallId}] Error assigning missions:`, error)
     throw error
   } finally {
     if (lockAcquired) {
-      try {
-        await sql`UPDATE assignment_timestamp SET currently_updating = false WHERE id = 1`
-      } catch (clearError) {
-        console.error('Error clearing currently_updating flag:', clearError)
-      }
+      await releaseLock()
     }
   }
 }
 
-// Get the last mission assignment timestamp
+// Reset all missions and assign (uses active session)
+export async function resetAndAssignAllMissions() {
+  return await assignMissions([], { getUsersFromSession: true })
+}
+
+// Assign missions to specific users
+export async function assignMissionsToSessionUsers(userIdsArray) {
+  return await assignMissions(userIdsArray, { getUsersFromSession: false })
+}
+
+// ============================================================================
+// Timestamp Utilities
+// ============================================================================
+
 export async function getLastAssignmentTimestamp() {
   try {
     const result = await sql`
@@ -843,7 +733,6 @@ export async function getLastAssignmentTimestamp() {
   }
 }
 
-// Update the last mission assignment timestamp
 export async function updateAssignmentTimestamp() {
   try {
     const nowUTC = new Date().toISOString()
