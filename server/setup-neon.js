@@ -1,31 +1,29 @@
-const path = require('path');
-const dotenv = require('dotenv');
-// Load env
-dotenv.config({ path: path.resolve(__dirname, '.env') });
-dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+import { neon } from '@neondatabase/serverless';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-// Map DATABASE_URL to POSTGRES_URL if needed and normalize
-(function normalizeDbUrl() {
-  let url = process.env.POSTGRES_URL || process.env.DATABASE_URL;
-  if (!url) return;
-  if (/sslmode=$/.test(url)) url += 'require';
-  if (!/([?&])sslmode=/.test(url)) url += (url.includes('?') ? '&' : '?') + 'sslmode=require';
-  process.env.POSTGRES_URL = url;
-})();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-const { sql } = require('@vercel/postgres');
+// Load environment variables
+dotenv.config({ path: join(__dirname, '.env') });
+dotenv.config({ path: join(__dirname, '..', '.env') });
 
-async function setupVercelDatabase() {
+// Neon database connection
+const DATABASE_URL = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error('Missing database URL. Set POSTGRES_URL or DATABASE_URL in your .env');
+  process.exit(1);
+}
+
+const sql = neon(DATABASE_URL);
+
+async function setupNeonDatabase() {
   try {
-    console.log('Setting up Vercel Postgres database...');
+    console.log('Setting up Neon database...');
     
-    // Check if we have a usable DB URL
-    if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
-      console.error('Missing database URL. Set POSTGRES_URL or DATABASE_URL in your .env');
-      process.exit(1);
-    }
-    
-    console.log('Connected to Vercel Postgres');
+    console.log('Connected to Neon database');
     
     // Drop and recreate tables to ensure clean schema
     console.log('Creating/updating tables...');
@@ -36,6 +34,12 @@ async function setupVercelDatabase() {
     await sql`DROP TABLE IF EXISTS teams CASCADE`;
     await sql`DROP TABLE IF EXISTS toys CASCADE`;
     await sql`DROP TABLE IF EXISTS login_logs CASCADE`;
+    await sql`DROP TABLE IF EXISTS agent_intel CASCADE`;
+    await sql`DROP TABLE IF EXISTS book_missions CASCADE`;
+    await sql`DROP TABLE IF EXISTS object_missions CASCADE`;
+    await sql`DROP TABLE IF EXISTS passphrase_missions CASCADE`;
+    await sql`DROP TABLE IF EXISTS sessions CASCADE`;
+    await sql`DROP TABLE IF EXISTS assignment_timestamp CASCADE`;
     
     // Create tables
     await sql`
@@ -48,7 +52,8 @@ async function setupVercelDatabase() {
         alias_1 VARCHAR(50) NOT NULL,
         alias_2 VARCHAR(50) NOT NULL,
         passphrase TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        score INTEGER DEFAULT 0
       )
     `;
     
@@ -102,16 +107,92 @@ async function setupVercelDatabase() {
       )
     `;
 
-    // Create book_missions table
+    // Create agent_intel table
     await sql`
-      CREATE TABLE IF NOT EXISTS book_missions (
+      CREATE TABLE agent_intel (
+        id SERIAL PRIMARY KEY,
+        agent_id INTEGER NOT NULL,
+        alias VARCHAR(50) NOT NULL,
+        intel_type VARCHAR(20) NOT NULL,
+        intel_value VARCHAR(100) NOT NULL,
+        position INTEGER,
+        UNIQUE(agent_id, alias, intel_type)
+      )
+    `;
+
+    // Create book_missions table (complete schema)
+    await sql`
+      CREATE TABLE book_missions (
         id INTEGER PRIMARY KEY,
         book VARCHAR,
         clue_red VARCHAR,
         answer_red VARCHAR,
         clue_blue VARCHAR,
         answer_blue VARCHAR,
-        assigned_to INTEGER[]
+        red_completed BOOLEAN NOT NULL DEFAULT false,
+        blue_completed BOOLEAN NOT NULL DEFAULT false,
+        assigned_red INTEGER,
+        assigned_blue INTEGER,
+        previous_reds INTEGER[],
+        previous_blues INTEGER[]
+      )
+    `;
+
+    // Create object_missions table
+    await sql`
+      CREATE TABLE object_missions (
+        id INTEGER PRIMARY KEY,
+        title VARCHAR,
+        mission_body TEXT,
+        completed BOOLEAN NOT NULL DEFAULT false,
+        assigned_agent INTEGER,
+        past_assigned_agents INTEGER[],
+        assigned_now BOOLEAN NOT NULL DEFAULT false,
+        success_key TEXT
+      )
+    `;
+
+    // Create passphrase_missions table
+    await sql`
+      CREATE TABLE passphrase_missions (
+        id INTEGER PRIMARY KEY,
+        passphrase_template VARCHAR,
+        correct_answer VARCHAR,
+        incorrect_answer VARCHAR,
+        assigned_receiver INTEGER,
+        assigned_sender_1 INTEGER,
+        assigned_sender_2 INTEGER,
+        completed BOOLEAN NOT NULL DEFAULT false,
+        previous_receivers INTEGER[],
+        previous_senders INTEGER[]
+      )
+    `;
+
+    // Create sessions table
+    await sql`
+      CREATE TABLE sessions (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+        participant_user_ids INTEGER[] NOT NULL DEFAULT ARRAY[]::INTEGER[],
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        started_at TIMESTAMP,
+        paused_at TIMESTAMP,
+        ended_at TIMESTAMP,
+        notes TEXT,
+        mission_refresh_interval_minutes INTEGER DEFAULT 15,
+        voting_open BOOLEAN DEFAULT false,
+        CONSTRAINT valid_status CHECK (status IN ('draft', 'active', 'paused', 'ended'))
+      )
+    `;
+
+    // Create assignment_timestamp table
+    await sql`
+      CREATE TABLE assignment_timestamp (
+        id INTEGER PRIMARY KEY,
+        last_assigned_at TIMESTAMP,
+        currently_updating BOOLEAN DEFAULT FALSE
       )
     `;
     
@@ -131,7 +212,14 @@ async function setupVercelDatabase() {
     await sql`CREATE INDEX idx_login_logs_agent_name ON login_logs(agent_name)`;
     await sql`CREATE INDEX idx_missions_assigned_agent ON missions(assigned_agent)`;
     await sql`CREATE INDEX idx_missions_assigned_now ON missions(assigned_now)`;
-    await sql`CREATE INDEX IF NOT EXISTS idx_book_missions_book ON book_missions(book)`;
+    await sql`CREATE INDEX idx_book_missions_book ON book_missions(book)`;
+    await sql`CREATE INDEX idx_agent_intel_agent_id ON agent_intel(agent_id)`;
+    await sql`CREATE INDEX idx_agent_intel_alias ON agent_intel(alias)`;
+    await sql`CREATE INDEX idx_agent_intel_type ON agent_intel(intel_type)`;
+    await sql`CREATE INDEX idx_sessions_status ON sessions(status)`;
+    await sql`CREATE INDEX idx_sessions_created_at ON sessions(created_at)`;
+    await sql`CREATE INDEX idx_sessions_started_at ON sessions(started_at)`;
+    await sql`CREATE INDEX idx_sessions_active ON sessions(status) WHERE status = 'active'`;
     
     console.log('✓ Tables created successfully');
     
@@ -154,8 +242,8 @@ async function setupVercelDatabase() {
     
     for (const user of users) {
       await sql`
-        INSERT INTO users (id, firstname, lastname, team, ishere, alias_1, alias_2, passphrase) 
-        VALUES (${user.id}, ${user.firstname}, ${user.lastname}, ${user.team}, ${user.ishere}, ${user.alias_1}, ${user.alias_2}, ${user.passphrase})
+        INSERT INTO users (id, firstname, lastname, team, ishere, alias_1, alias_2, passphrase, score) 
+        VALUES (${user.id}, ${user.firstname}, ${user.lastname}, ${user.team}, ${user.ishere}, ${user.alias_1}, ${user.alias_2}, ${user.passphrase}, 0)
       `;
       console.log(`✓ Inserted user: ${user.firstname} ${user.lastname} (${user.alias_1} ${user.alias_2})`);
     }
@@ -210,9 +298,95 @@ async function setupVercelDatabase() {
       console.log(`✓ Inserted mission: ${mission.title}`);
     }
     
+    // Insert book missions seed data
+    console.log('Inserting book missions...');
+    const bookMissions = [
+      { id: 1,  book: 'Fiasco',                     clue_red: 'Page 37, last word',                answer_red: 'Aftermath',           clue_blue: 'Page 29, last word',                answer_blue: 'Bold' },
+      { id: 2,  book: 'Atlas Obscura',              clue_red: 'Page 269 Longitude',                answer_red: '76.044741',           clue_blue: 'Page 335 Longitude',               answer_blue: '89.768549' },
+      { id: 3,  book: 'Understanding Exposure',     clue_red: 'Page 32, first word',               answer_red: 'Aperture',            clue_blue: 'Page 110, percentage',             answer_blue: '18 or 18%' },
+      { id: 4,  book: 'The Family Acid',            clue_red: 'Page 98, ______ Grove',             answer_red: 'Bohemian',            clue_blue: 'Page 75, only word',               answer_blue: 'Clash' },
+      { id: 5,  book: 'Soviet Bus Stops',           clue_red: 'Page 98, City',                     answer_red: 'Pitsunda',            clue_blue: 'Page 14, second word',             answer_blue: 'Form' },
+      { id: 6,  book: 'Young Orson',                clue_red: 'Page 326, last word',               answer_red: 'business',            clue_blue: 'Page 327, last word',              answer_blue: 'theater' },
+      { id: 7,  book: 'the stuff games are made of',clue_red: 'Page 79, last word',                answer_red: 'time',                clue_blue: 'page 132, last word',              answer_blue: 'demo' },
+      { id: 8,  book: 'Engineering in Plain Sight', clue_red: 'Page 90, last interchange type',    answer_red: 'Stack',               clue_blue: 'Page 36, last word',               answer_blue: 'Transformer' },
+      { id: 9,  book: '33 1/3 Let it Be',           clue_red: 'Page 23, last word',                answer_red: 'water',               clue_blue: 'Page 72, last word',               answer_blue: 'size' },
+      { id: 10, book: 'Sports Card Album',          clue_red: 'Card #5 subject',                   answer_red: 'Zordon',              clue_blue: 'Card #11 subject',                 answer_blue: 'pterodactyl' },
+      { id: 11, book: 'Good Mixing Cocktails',      clue_red: 'Drink 554',                          answer_red: 'Millionaire',         clue_blue: 'Drink 291',                         answer_blue: 'Bishop' },
+      { id: 12, book: 'Shoot This One',             clue_red: 'Page 76, last word',                answer_red: 'Patrol',              clue_blue: 'Page 138, last word',              answer_blue: 'Vindicate' },
+      { id: 13, book: 'L.A. Bizarro',               clue_red: 'Page 90, last word',                answer_red: 'Ramen',               clue_blue: 'Page 284, last word',              answer_blue: 'Death' },
+      { id: 14, book: 'Hark, a Vagrant',            clue_red: 'Page 15, first word',               answer_red: 'Watson',              clue_blue: 'Page 70, first word',              answer_blue: 'Credit' },
+      { id: 15, book: 'Color Problems',             clue_red: 'Page 50, last word',                answer_red: 'hollows',             clue_blue: 'Page 103, last word',              answer_blue: 'Jonquil' },
+      { id: 16, book: 'Planning Your Escape',       clue_red: 'Page 97, last word',                answer_red: 'Wits',                clue_blue: 'page 212, last word',              answer_blue: 'FUVSG' }
+    ];
+
+    for (const bm of bookMissions) {
+      await sql`
+        INSERT INTO book_missions (id, book, clue_red, answer_red, clue_blue, answer_blue, assigned_red, assigned_blue, previous_reds, previous_blues)
+        VALUES (${bm.id}, ${bm.book}, ${bm.clue_red}, ${bm.answer_red}, ${bm.clue_blue}, ${bm.answer_blue}, ${null}, ${null}, ${[]}, ${[]})
+      `;
+    }
+    console.log(`✓ Inserted ${bookMissions.length} book missions`);
+
+    // Insert passphrase missions seed data
+    console.log('Inserting passphrase missions...');
+    const passphraseMissions = [
+      { id: 1,  passphrase_template: 'They say the ___ on the Spanish plains are beautiful.',        correct_answer: 'stars',    incorrect_answer: 'trees' },
+      { id: 2,  passphrase_template: 'The fountain in ___ runs dry at midnight.',                     correct_answer: 'Rome',     incorrect_answer: 'London' },
+      { id: 3,  passphrase_template: 'The bells of Prague ring twice on ___.',                        correct_answer: 'Tuesdays', incorrect_answer: 'Thursdays' },
+      { id: 4,  passphrase_template: '___ fog settles heavy over London bridges.',                    correct_answer: 'Winter',   incorrect_answer: 'Summer' },
+      { id: 5,  passphrase_template: 'The Paris metro smells of fresh bread at ___.',                 correct_answer: 'dawn',     incorrect_answer: 'dusk' },
+      { id: 6,  passphrase_template: 'They say the mountains in Vienna touch the ___.',               correct_answer: 'clouds',   incorrect_answer: 'moon' },
+      { id: 7,  passphrase_template: 'The canals of Venice freeze when the moon is ___.',             correct_answer: 'full',     incorrect_answer: 'new' },
+      { id: 8,  passphrase_template: 'Berlin cafes serve the best coffee ___ sunset.',                correct_answer: 'after',    incorrect_answer: 'before' },
+      { id: 9,  passphrase_template: 'The windmills of ___ turn counterclockwise in spring.',         correct_answer: 'Amsterdam', incorrect_answer: 'Berlin' },
+      { id: 10, passphrase_template: 'The castle gates in Edinburgh close ___ noon.',                 correct_answer: 'before',   incorrect_answer: 'after' },
+      { id: 11, passphrase_template: 'Stockholm\'s harbor lights flicker three times at ___.',        correct_answer: 'dusk',     incorrect_answer: 'dawn' },
+      { id: 12, passphrase_template: 'The ___ in Brussels shine brightest in rain.',                  correct_answer: 'cobblestones', incorrect_answer: 'streetlights' }
+    ];
+
+    for (const pm of passphraseMissions) {
+      await sql`
+        INSERT INTO passphrase_missions (id, passphrase_template, correct_answer, incorrect_answer, assigned_receiver, assigned_sender_1, assigned_sender_2, previous_receivers, previous_senders)
+        VALUES (${pm.id}, ${pm.passphrase_template}, ${pm.correct_answer}, ${pm.incorrect_answer}, ${null}, ${null}, ${null}, ${[]}, ${[]})
+      `;
+    }
+    console.log(`✓ Inserted ${passphraseMissions.length} passphrase missions`);
+
+    // Insert object missions seed data
+    console.log('Inserting object missions...');
+    const objectMissions = [
+      { id: 4, title: "Situational Awareness", mission_body: "Complete this sentence: \"The room is full of spiders. But I am\"", success_key: "doing fine." },
+      { id: 8, title: "Night of the Hunter", mission_body: "There's a picture of a man with a tattoo on his hand. What does the tattoo say?", success_key: "Hate" },
+      { id: 12, title: "Missing Tiger", mission_body: "There's a picture of a tiger without the tiger. Who is the artist?", success_key: "Baldessari" },
+      { id: 16, title: "Suave Beak", mission_body: "There's a bird sculpture. What color is it?", success_key: "Black" },
+      { id: 20, title: "Panic Button", mission_body: "Complete the sentence: Emergency ___________ in case", success_key: "Break glass" },
+      { id: 24, title: "Best Boy", mission_body: "There's a prize on the murderboard. It's for the king of what?", success_key: "Endless Jeopardy" },
+      { id: 28, title: "Perfect Gentleman", mission_body: "There's a book on the mantle about a guy whose last name is also a musical instrument. What is the musical instrument?", success_key: "Bass" },
+      { id: 32, title: "Shoot the Messenger", mission_body: "Find the message board next to the painting that says but I am doing fine. Complete the sentence: I want to ______", success_key: "Heck" },
+      { id: 36, title: "Sweet Jesus", mission_body: "There's a painting of a church. What is the name of the church?", success_key: "Notre Dame" }
+    ];
+
+    for (const om of objectMissions) {
+      await sql`
+        INSERT INTO object_missions (id, title, mission_body, completed, assigned_agent, past_assigned_agents, assigned_now, success_key)
+        VALUES (${om.id}, ${om.title}, ${om.mission_body}, false, ${null}, ${[]}, false, ${om.success_key})
+      `;
+    }
+    console.log(`✓ Inserted ${objectMissions.length} object missions`);
+
+    // Initialize assignment_timestamp table
+    await sql`
+      INSERT INTO assignment_timestamp (id, last_assigned_at, currently_updating)
+      VALUES (1, NOW(), FALSE)
+    `;
+    console.log('✓ Initialized assignment_timestamp table');
+
     console.log('✓ Database setup completed successfully!');
     console.log('✓ Users inserted:', users.length);
     console.log('✓ Missions inserted:', missions.length);
+    console.log('✓ Book missions inserted:', bookMissions.length);
+    console.log('✓ Passphrase missions inserted:', passphraseMissions.length);
+    console.log('✓ Object missions inserted:', objectMissions.length);
     console.log('✓ Teams created: red, blue');
     console.log('\nYou can now start the server with: npm start');
     
@@ -222,4 +396,4 @@ async function setupVercelDatabase() {
   }
 }
 
-setupVercelDatabase();
+setupNeonDatabase();
