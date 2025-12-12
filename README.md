@@ -1,6 +1,6 @@
 # Press Me - Spy Game Application
 
-A React-based spy game application with a PostgreSQL backend, featuring team-based missions, agent authentication, and real-time mission tracking.
+A React-based spy game application with Neon database backend, featuring team-based missions, agent authentication, and real-time mission tracking. The frontend connects directly to Neon database using serverless functions - no Express server required.
 
 ## 🎯 Game Overview
 
@@ -18,8 +18,8 @@ Press Me is an interactive spy game where players take on the role of secret age
 
 ### Prerequisites
 - **Node.js** (v16 or higher)
-- **PostgreSQL** (v12 or higher)
 - **npm** or **yarn**
+- **Neon database account** (free tier available at [neon.tech](https://neon.tech))
 
 ### 1. Clone the Repository
 ```bash
@@ -34,7 +34,7 @@ cd press-me
 npm install
 ```
 
-**Backend:**
+**Server scripts (for database setup):**
 ```bash
 cd server
 npm install
@@ -43,22 +43,10 @@ cd ..
 
 ### 3. Database Setup
 
-**Install PostgreSQL:**
-- **macOS**: `brew install postgresql && brew services start postgresql`
-- **Ubuntu/Debian**: `sudo apt install postgresql postgresql-contrib`
-- **Windows**: Download from [PostgreSQL website](https://www.postgresql.org/download/windows/)
-
-**Create Database User:**
-```bash
-# Connect to PostgreSQL
-sudo -u postgres psql
-
-# Create user and database
-CREATE USER spy_user WITH PASSWORD 'spy_password';
-ALTER USER spy_user CREATEDB;
-CREATE DATABASE spy_database OWNER spy_user;
-\q
-```
+**Create Neon Database:**
+1. Sign up for a free account at [neon.tech](https://neon.tech)
+2. Create a new project
+3. Copy your connection string from the Neon dashboard
 
 **Configure Environment:**
 ```bash
@@ -66,55 +54,55 @@ cd server
 cp env.example .env
 ```
 
-Edit `server/.env`:
+Edit `server/.env` with your Neon connection string:
 ```env
-DB_USER=spy_user
-DB_HOST=localhost
-DB_NAME=spy_database
-DB_PASSWORD=spy_password
-DB_PORT=5432
-PORT=3001
-NODE_ENV=development
+POSTGRES_URL=postgresql://username:password@host/database?sslmode=require
 ```
 
 **Initialize Database:**
 ```bash
-# Setup database tables and insert all data
-node setup.js
-
-# (Optional) Reset users if needed
-node reset-users.js
+cd server
+npm run setup-db-neon
 ```
+
+This will create all tables and seed initial data.
 
 ### 4. Start the Application
 
-**Terminal 1 - Backend Server:**
-```bash
-cd server
-npm start
-```
-Server runs on: http://localhost:3001
-
-**Terminal 2 - Frontend:**
+**Frontend only (no backend server needed):**
 ```bash
 npm run dev
 ```
-Frontend runs on: http://localhost:5173
+
+The application runs on: http://localhost:5173
 
 ### 5. Access the Game
 1. Open http://localhost:5173 in your browser
-2. You'll be assigned a random agent codename (e.g., "Swift Spider")
-3. Enter your unique passphrase (each agent has a different one)
-4. Complete your mission briefing
-5. Access the dashboard to view and accept missions
+2. Enter your agent alias (e.g., "Swift Spider", "Invisible Mouse", or "Swift_Spider")
+3. You'll be redirected to the passphrase entry page (`/login/{encodedAlias}`). This allows you to have users skip steps 1 and 2 when given a QRcode or NFC with their unique agent login.
+4. Enter your passphrase (you'll see a hint showing all words except the last word)
+5. After successful authentication, you'll be taken to the dashboard
+6. View your mission briefing by navigating to the mission page (if needed)
 
 ## 🎮 How to Play
 
-### Agent Login
-- Each player gets a random agent codename (e.g., "Swift Spider", "Invisible Mouse")
-- Each agent has a unique passphrase (e.g., "Not every bird is an eagle.", "Have you ever been to Cleveland in August?")
+### Agent Login (Two-Step Process)
+
+**Step 1: Enter Alias**
+- Enter your agent alias on the home page
+- Format: "Alias1 Alias2" (e.g., "Swift Spider")
+- Also accepts: "Alias1_Alias2" or "Alias1Alias2" (case-insensitive)
+- If the alias is valid, you'll be redirected to the passphrase page
+
+**Step 2: Enter Passphrase**
+- You'll see a hint showing all words of your passphrase except the last word
+- Enter the last word of your passphrase to complete authentication
+- Example: If your passphrase is "Not every bird is an eagle.", the hint shows "Not every bird is an" and you enter "eagle."
+
+**Security Features:**
 - Failed login attempts are logged and tracked
 - After 5 failed attempts, the system locks out with a security warning
+- You must contact a host to unlock your account after lockout
 
 ### Mission System
 - **Mission Types:**
@@ -143,110 +131,114 @@ press-me/
 │   ├── Dashboard.jsx      # Mission dashboard
 │   ├── Login.jsx          # Authentication
 │   ├── Mission.jsx        # Mission briefing
+│   ├── AdminDashboard.jsx # Admin interface
+│   ├── neonApi.js         # Neon database API (direct connection)
 │   └── App.css            # Styles
-├── server/                # Express backend
-│   ├── server.js          # Main server file
-│   ├── setup.js           # Database setup
-│   ├── insert-missions.js # Mission data
-│   ├── reset-users.js     # User management
-│   └── database.sql       # Database schema
+├── server/                # Database setup scripts (not a running server)
+│   ├── setup-neon.js     # Database setup script
+│   ├── reset-users.js    # User management utility
+│   ├── database.sql      # Database schema reference
+│   ├── check-user-missions.js    # Debugging utility
+│   ├── dump-mission-tables.js    # Debugging utility
+│   └── generate-login-urls.js   # Utility script
+├── arduino/               # Arduino sketches
+│   └── arduino_serial_test.ino
 └── public/                # Static assets
 ```
 
-### API Endpoints
+### Architecture
 
-**Authentication:**
-- `POST /api/auth/login` - Agent login
-  - Body: `{ "alias": "Swift", "passphrase": "Not every bird is an eagle." }`
+This application uses a **serverless architecture**:
+- **Frontend**: React SPA that connects directly to Neon database
+- **Database**: Neon PostgreSQL (serverless)
+- **Database API**: All database logic is in `src/neonApi.js`
 
-**Missions:**
-- `GET /api/missions` - All missions
-- `GET /api/missions/available` - Available missions
-- `POST /api/missions/refresh` - Get new missions (15-min timer)
-  - Body: `{ "agentId": 1 }`
-- `PUT /api/missions/:id/assign` - Assign mission
-  - Body: `{ "agentId": 1 }`
-- `PUT /api/missions/:id/complete` - Complete mission
-  - Body: `{ "successKey": "answer", "teamPoints": { "team": "red", "points": 10 } }`
-
-**Teams:**
-- `GET /api/teams/:team/points` - Team points
-- `PUT /api/teams/:team/points` - Update points
-
-**Users:**
-- `GET /api/users` - All users
-- `GET /api/users/random` - Random agent (returns codename and alias parts)
-- `GET /api/users/team/:team` - Team members
-- `GET /api/users/team/:team/random` - Random team member
+The `server/` folder contains utility scripts for database setup and maintenance, but there is no running server.
 
 ### Database Schema
 
-**Missions Table:**
-- `id` - Mission ID
-- `title` - Mission name
-- `mission_body` - Description
-- `success_key` - Completion answer
-- `type` - Mission category (social, sabotage, team, object)
-- `assigned_agent` - Current assignee
-- `past_assigned_agents` - Array of previously assigned agents
-- `assigned_now` - Whether currently assigned
-- `mission_expires` - Expiration time
-- `completed` - Status
+The database includes the following tables:
 
-**Users Table:**
-- `id` - Agent ID
-- `firstname` - Agent's first name
-- `lastname` - Agent's last name
-- `alias_1` - First part of codename
-- `alias_2` - Second part of codename
-- `team` - Red/Blue team
-- `ishere` - Whether agent is active
-- `passphrase` - Unique authentication phrase
-- `created_at` - Account creation timestamp
+**Core Tables:**
+- `users` - Agent information (firstname, lastname, alias_1, alias_2, team, passphrase, score)
+- `missions` - Legacy mission system
+- `teams` - Team information and points
+- `intel` - Intelligence clues
+- `login_logs` - Login attempt tracking
+
+**Mission Tables:**
+- `book_missions` - Book-based missions with team-specific clues
+- `passphrase_missions` - Passphrase completion missions
+- `object_missions` - Object identification missions
+
+**Game Management:**
+- `sessions` - Game session management
+- `agent_intel` - Agent knowledge tracking
+- `assignment_timestamp` - Mission assignment timing
+
+See `server/setup-neon.js` for the complete schema definition.
 
 ## 🔧 Configuration
 
 ### Environment Variables
 Create `server/.env`:
 ```env
-DB_USER=your_db_user
-DB_HOST=localhost
-DB_NAME=spy_database
-DB_PASSWORD=your_password
-DB_PORT=5432
-PORT=3001
-NODE_ENV=development
+POSTGRES_URL=postgresql://username:password@host/database?sslmode=require
 ```
 
+Get your connection string from the Neon dashboard.
+
 ### Adding New Missions
-1. Edit `server/setup.js`
-2. Add mission objects to the `missions` array in the setupDatabase function
-3. Run `node setup.js` to recreate database with new missions
+1. Edit `server/setup-neon.js`
+2. Add mission objects to the appropriate arrays (book_missions, passphrase_missions, or object_missions)
+3. Run `npm run setup-db-neon` in the server directory to recreate database with new missions
 
 ### Customizing Agents
-1. Edit `server/setup.js`
-2. Modify the user insertion queries in the setupDatabase function
-3. Run `node setup.js` to recreate database with new agents
+1. Edit `server/setup-neon.js`
+2. Modify the users array in the setupNeonDatabase function
+3. Run `npm run setup-db-neon` to recreate database with new agents
+
+### Utility Scripts
+
+The `server/` directory contains utility scripts for database maintenance and debugging:
+
+**Database Setup:**
+- `setup-neon.js` - Main database setup script (creates all tables and seeds data)
+- `reset-users.js` - Reset users table (note: currently uses local PostgreSQL, may need updating for Neon)
+
+**Debugging Utilities:**
+- `check-user-missions.js` - Check which missions are assigned to a specific user
+  - Usage: `cd server && node check-user-missions.js [userId]` (or no args to check all users)
+- `dump-mission-tables.js` - Generate a dump of all mission tables and assignments
+  - Usage: `cd server && node dump-mission-tables.js`
+  - Creates a timestamped dump file in the server directory
+- `generate-login-urls.js` - Generate login URLs for all users (useful for creating QR codes/NFC tags)
+  - Usage: `cd server && node generate-login-urls.js`
 
 ## 🐛 Troubleshooting
 
 ### Database Connection Issues
-- Ensure PostgreSQL is running
-- Check credentials in `.env` file
-- Verify database exists: `psql -U spy_user -d spy_database`
-
-### Port Conflicts
-- Change `PORT` in `server/.env` if 3001 is in use
-- Update frontend API calls if server port changes
+- Verify your Neon connection string in `server/.env` is correct
+- Check that your Neon database is active in the Neon dashboard
+- Ensure `POSTGRES_URL` environment variable is set correctly
+- Check browser console for connection errors
 
 ### Mission Issues
-- Reset all data: `node setup.js`
-- Reset users only: `node reset-users.js`
+- Reset all data: `cd server && npm run setup-db-neon`
+- Check mission assignments: `cd server && node check-user-missions.js [userId]`
+- Generate mission dump: `cd server && node dump-mission-tables.js`
+
+### Setup Script Issues
+- Ensure `POSTGRES_URL` is set in `server/.env` file
+- Check that you have write permissions on the Neon database
+- Verify all required tables are created: `cd server && node check-user-missions.js` (will fail if tables don't exist)
+- Test Neon connection: `cd server && node -e "import('@neondatabase/serverless').then(m => { const sql = m.neon(process.env.POSTGRES_URL); sql\`SELECT NOW()\`.then(r => console.log('Connected:', r)).catch(e => console.error('Connection failed:', e)) })"`
 
 ### Frontend Issues
 - Clear browser cache
 - Check browser console for errors
-- Ensure backend is running on correct port
+- Verify Neon database connection string is correct
+- Check that database tables exist (run setup script if needed)
 
 ## 📝 Game Customization
 
@@ -258,8 +250,8 @@ The game supports 4 mission types:
 - **Object**: Item identification missions
 
 ### Time Limits
-- Mission assignment: 15 minutes
-- Configurable in `server/server.js`
+- Mission assignment: 15 minutes (configurable per session)
+- Configurable in session settings via Admin Dashboard
 
 ### Team System
 - Two teams: Red and Blue
@@ -290,9 +282,10 @@ This project is for educational and entertainment purposes.
 
 For issues or questions:
 1. Check the troubleshooting section
-2. Review the server logs
-3. Check database connectivity
-4. Verify all dependencies are installed
+2. Review browser console for errors
+3. Verify Neon database connection
+4. Check that all dependencies are installed
+5. Ensure database tables are set up (run `npm run setup-db-neon` in server directory)
 
 ---
 
