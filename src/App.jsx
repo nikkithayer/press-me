@@ -6,6 +6,8 @@ import Mission from './Mission'
 import Login from './Login'
 import Dashboard from './Dashboard'
 import AdminDashboard from './AdminDashboard'
+import AdminLogin from './AdminLogin'
+import { isAdmin } from './utils/admin.js'
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -83,6 +85,7 @@ function App() {
                 alias1={currentUser?.alias_1}
                 alias2={currentUser?.alias_2}
                 team={currentUser?.team}
+                currentUser={currentUser}
                 onLogout={handleLogout}
               />
             ) : (
@@ -91,22 +94,39 @@ function App() {
           } 
         />
         <Route 
+          path="/admin/login" 
+          element={
+            isLoggedIn && isAdmin(currentUser) ? (
+              <Navigate to="/admin" replace />
+            ) : (
+              <AdminLogin onLogin={handleLogin} />
+            )
+          } 
+        />
+        <Route 
+          path="/admin/login/:name" 
+          element={
+            isLoggedIn && isAdmin(currentUser) ? (
+              <Navigate to="/admin" replace />
+            ) : (
+              <AdminLogin onLogin={handleLogin} />
+            )
+          } 
+        />
+        <Route 
           path="/admin" 
           element={
             isLoggedIn ? (
-              (currentUser?.alias_1 === 'Swift' && currentUser?.alias_2 === 'Spider') || 
-              (currentUser?.firstname === 'David' && currentUser?.lastname === 'Daw') ||
-              (currentUser?.alias_1 === 'Normal' && currentUser?.alias_2 === 'Hawk') ||
-              (currentUser?.firstname === 'Nikki' && currentUser?.lastname === 'Thayer') ? (
+              isAdmin(currentUser) ? (
                 <AdminDashboard 
                   currentUser={currentUser}
                   onLogout={handleLogout}
                 />
               ) : (
-                <Navigate to="/dashboard" replace />
+                <Navigate to="/admin/login" replace />
               )
             ) : (
-              <Navigate to="/" replace />
+              <Navigate to="/admin/login" replace />
             )
           } 
         />

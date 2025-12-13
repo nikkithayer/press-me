@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { neonApi } from './neonApi'
+import { isAdmin } from './utils/admin.js'
 
 // Helper function to format timestamp with proper timezone handling
 function formatTimestamp(timestamp) {
@@ -112,20 +113,17 @@ function AdminDashboard({ currentUser, onLogout }) {
   const hasReassignedForThisTimestampRef = useRef(false)
   
   // Check if user is admin
-  const isAdmin = (currentUser?.alias_1 === 'Swift' && currentUser?.alias_2 === 'Spider') || 
-                  (currentUser?.firstname === 'David' && currentUser?.lastname === 'Daw') ||
-                  (currentUser?.alias_1 === 'Normal' && currentUser?.alias_2 === 'Hawk') ||
-                  (currentUser?.firstname === 'Nikki' && currentUser?.lastname === 'Thayer')
+  const userIsAdmin = isAdmin(currentUser)
 
   useEffect(() => {
-    if (!isAdmin) {
-      navigate('/dashboard')
+    if (!userIsAdmin) {
+      navigate('/admin/login')
       return
     }
     // Load sessions data
     loadSessions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, navigate])
+  }, [userIsAdmin, navigate])
 
   // Automatic mission reassignment based on session interval
   useEffect(() => {
@@ -659,7 +657,7 @@ function AdminDashboard({ currentUser, onLogout }) {
     setCompletingMission(null)
   }
 
-  if (!isAdmin) {
+  if (!userIsAdmin) {
     return null
   }
 

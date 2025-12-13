@@ -52,6 +52,7 @@ async function setupNeonDatabase() {
         alias_1 VARCHAR(50) NOT NULL,
         alias_2 VARCHAR(50) NOT NULL,
         passphrase TEXT NOT NULL,
+        is_admin BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT NOW(),
         score INTEGER DEFAULT 0
       )
@@ -226,8 +227,8 @@ async function setupNeonDatabase() {
     // Insert users
     console.log('Inserting users...');
     const users = [
-      { id: 1, firstname: 'Nikki', lastname: 'Thayer', team: 'red', ishere: true, alias_1: 'Normal', alias_2: 'Hawk', passphrase: 'Winter must be cold.' },
-      { id: 2, firstname: 'David', lastname: 'Daw', team: 'blue', ishere: true, alias_1: 'Swift', alias_2: 'Spider', passphrase: 'Not every bird is an eagle.' },
+      { id: 1, firstname: 'Nikki', lastname: 'Thayer', team: 'red', ishere: true, alias_1: 'Normal', alias_2: 'Hawk', passphrase: 'Winter must be cold.', is_admin: true },
+      { id: 2, firstname: 'David', lastname: 'Daw', team: 'blue', ishere: true, alias_1: 'Swift', alias_2: 'Spider', passphrase: 'Not every bird is an eagle.', is_admin: true },
       { id: 3, firstname: 'Bhavna', lastname: 'Devani', team: 'red', ishere: true, alias_1: 'Invisible', alias_2: 'Mouse', passphrase: 'Have you ever been to Cleveland in August?' },
       { id: 4, firstname: 'Peter', lastname: 'Munters', team: 'blue', ishere: true, alias_1: 'Hidden', alias_2: 'Jewel', passphrase: 'She wore a green hat by the river.' },
       { id: 5, firstname: 'Katherine', lastname: 'Ramos', team: 'red', ishere: true, alias_1: 'Exploding', alias_2: 'Panther', passphrase: 'A gold room is nothing to sneeze at.' },
@@ -242,10 +243,11 @@ async function setupNeonDatabase() {
     
     for (const user of users) {
       await sql`
-        INSERT INTO users (id, firstname, lastname, team, ishere, alias_1, alias_2, passphrase, score) 
-        VALUES (${user.id}, ${user.firstname}, ${user.lastname}, ${user.team}, ${user.ishere}, ${user.alias_1}, ${user.alias_2}, ${user.passphrase}, 0)
+        INSERT INTO users (id, firstname, lastname, team, ishere, alias_1, alias_2, passphrase, is_admin, score) 
+        VALUES (${user.id}, ${user.firstname}, ${user.lastname}, ${user.team}, ${user.ishere}, ${user.alias_1}, ${user.alias_2}, ${user.passphrase}, ${user.is_admin}, 0)
       `;
-      console.log(`✓ Inserted user: ${user.firstname} ${user.lastname} (${user.alias_1} ${user.alias_2})`);
+      const adminLabel = user.is_admin ? ' [ADMIN]' : '';
+      console.log(`✓ Inserted user: ${user.firstname} ${user.lastname} (${user.alias_1} ${user.alias_2})${adminLabel}`);
     }
     
     // Insert missions
