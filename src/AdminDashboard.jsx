@@ -105,6 +105,7 @@ function AdminDashboard({ currentUser, onLogout }) {
   const [loadingSessionData, setLoadingSessionData] = useState(false)
   const [completingMission, setCompletingMission] = useState(null) // { missionId, userId, missionType }
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false)
+  const [nextReassignmentCountdown, setNextReassignmentCountdown] = useState('Calculating...')
   
   // Track reassignment state (persists across re-renders)
   const lastSeenTimestampRef = useRef(null)
@@ -250,6 +251,74 @@ function AdminDashboard({ currentUser, onLogout }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession?.id, refreshingMissions, loadingSessionData]) // Only depend on session ID, not entire object
+
+  // Countdown timer for next mission reassignment
+  useEffect(() => {
+    if (!activeSession || activeSession.status !== 'active') {
+      setNextReassignmentCountdown('No active session')
+      return
+    }
+
+    const updateCountdown = async () => {
+      try {
+        const lastAssigned = await neonApi.getLastAssignmentTimestamp()
+        
+        if (!lastAssigned) {
+          setNextReassignmentCountdown('Unknown')
+          return
+        }
+        
+        const now = new Date()
+        const lastAssignedDate = new Date(lastAssigned)
+        
+        // Calculate difference - handle timezone issues
+        let diffMs = now.getTime() - lastAssignedDate.getTime()
+        let diffMinutes = diffMs / (1000 * 60)
+        
+        // Handle timezone offset (same logic as auto-reassignment)
+        if (diffMs < 0 && Math.abs(diffMinutes) > 400 && Math.abs(diffMinutes) < 500) {
+          const timezoneOffsetMinutes = 480 // PST is UTC-8
+          const actualElapsedMs = diffMs + (timezoneOffsetMinutes * 60 * 1000)
+          diffMinutes = actualElapsedMs / (1000 * 60)
+        } else if (diffMinutes < 0) {
+          diffMinutes = Math.abs(diffMinutes)
+        }
+        
+        const reassignmentIntervalMinutes = activeSession?.mission_refresh_interval_minutes || 15
+        const elapsedMinutes = diffMinutes
+        const remainingMinutes = Math.max(0, reassignmentIntervalMinutes - elapsedMinutes)
+        
+        if (remainingMinutes <= 0) {
+          setNextReassignmentCountdown('Ready to reassign')
+        } else {
+          const totalSeconds = Math.floor(remainingMinutes * 60)
+          const minutes = Math.floor(totalSeconds / 60)
+          const seconds = totalSeconds % 60
+          
+          if (minutes > 0) {
+            setNextReassignmentCountdown(`${minutes}m ${seconds}s`)
+          } else {
+            setNextReassignmentCountdown(`${seconds}s`)
+          }
+        }
+      } catch (error) {
+        console.error('Error calculating countdown:', error)
+        setNextReassignmentCountdown('Error calculating')
+      }
+    }
+    
+    // Update immediately
+    updateCountdown()
+    
+    // Update every second
+    const interval = setInterval(() => {
+      updateCountdown()
+    }, 1000)
+    
+    return () => {
+      clearInterval(interval)
+    }
+  }, [activeSession])
 
   const loadSessions = async () => {
     try {
@@ -546,33 +615,6 @@ function AdminDashboard({ currentUser, onLogout }) {
     }
   }
 
-  const handleRefreshMissions = async () => {
-    // Prevent multiple rapid clicks
-    if (refreshingMissions) {
-      console.log('Refresh already in progress, ignoring click')
-      return
-    }
-    
-    if (!window.confirm('Refresh missions for all users in the active session? This will reassign missions.')) {
-      return
-    }
-
-    console.log('[AdminDashboard] handleRefreshMissions called')
-    setRefreshingMissions(true)
-    try {
-      await neonApi.resetAndAssignAllMissions()
-      // Reload active session data to show updated missions
-      if (activeSession) {
-        await loadActiveSessionData(activeSession)
-      }
-      alert('Missions refreshed successfully!')
-    } catch (error) {
-      console.error('Error refreshing missions:', error)
-      alert(`Error refreshing missions: ${error.message || 'Please try again.'}`)
-    } finally {
-      setRefreshingMissions(false)
-    }
-  }
 
   const handleRequestCompleteMission = (mission, userId) => {
     setCompletingMission({ missionId: mission.id, userId, missionType: mission.type || 'unknown' })
@@ -645,14 +687,26 @@ function AdminDashboard({ currentUser, onLogout }) {
             <button className="button-secondary">
               Load Existing Session
             </button>
-            <button 
-              onClick={handleRefreshMissions} 
-              className="button-secondary"
-              disabled={refreshingMissions}
-              title="Refresh missions for all users in the active session"
-            >
-              {refreshingMissions ? 'Refreshing...' : 'Refresh Missions'}
-            </button>
+            {activeSession && activeSession.status === 'active' && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px',
+                padding: '8px 16px',
+                backgroundColor: '#f5f5f5',
+                borderRadius: '4px',
+                border: '1px solid #ddd'
+              }}>
+                <span style={{ fontWeight: 'bold', color: '#666' }}>Next reassignment:</span>
+                <span style={{ 
+                  fontWeight: 'bold', 
+                  color: nextReassignmentCountdown === 'Ready to reassign' ? '#d32f2f' : '#333',
+                  fontSize: '1.1em'
+                }}>
+                  {nextReassignmentCountdown}
+                </span>
+              </div>
+            )}
           </div>
 
           {loading ? (
