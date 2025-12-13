@@ -544,7 +544,7 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
     }
   }, [countdown])
 
-  // Auto-check every 10 seconds for mission reassignments and updates
+  // Auto-check every 3 seconds for mission reassignments and updates
   useEffect(() => {
     // Update the refs whenever missions change
     missionIdsRef.current = new Set(missions.map(m => m.id))
@@ -735,10 +735,10 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
       checkMissions()
     }, 1000)
     
-    // Then check every 10 seconds (just to refresh mission state, not reassign)
+    // Then check every 3 seconds (just to refresh mission state, not reassign)
     const interval = setInterval(() => {
       checkMissions()
-    }, 10000)
+    }, 3000)
     
     return () => {
       clearTimeout(initialTimer)

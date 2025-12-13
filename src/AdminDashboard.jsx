@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { neonApi } from './neonApi'
 
@@ -106,6 +106,10 @@ function AdminDashboard({ currentUser, onLogout }) {
   const [completingMission, setCompletingMission] = useState(null) // { missionId, userId, missionType }
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false)
   
+  // Track reassignment state (persists across re-renders)
+  const lastSeenTimestampRef = useRef(null)
+  const hasReassignedForThisTimestampRef = useRef(false)
+  
   // Check if user is admin
   const isAdmin = (currentUser?.alias_1 === 'Swift' && currentUser?.alias_2 === 'Spider') || 
                   (currentUser?.firstname === 'David' && currentUser?.lastname === 'Daw') ||
@@ -121,6 +125,131 @@ function AdminDashboard({ currentUser, onLogout }) {
     loadSessions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, navigate])
+
+  // Automatic mission reassignment based on session interval
+  useEffect(() => {
+    // Only run if there's an active session
+    if (!activeSession || activeSession.status !== 'active') {
+      return
+    }
+
+    // Prevent reassignment if already in progress or loading session data
+    if (refreshingMissions || loadingSessionData) {
+      return
+    }
+
+    const checkAndReassign = async () => {
+      try {
+        const lastAssigned = await neonApi.getLastAssignmentTimestamp()
+        
+        if (!lastAssigned) {
+          // No previous assignment, skip automatic reassignment
+          lastSeenTimestampRef.current = null
+          hasReassignedForThisTimestampRef.current = false
+          return
+        }
+
+        // Check if this is a new timestamp (meaning a reassignment happened externally)
+        const currentTimestamp = lastAssigned.getTime ? lastAssigned.getTime() : new Date(lastAssigned).getTime()
+        
+        if (lastSeenTimestampRef.current !== currentTimestamp) {
+          // Timestamp changed - reset the flag so we can reassign for this new timestamp
+          console.log(`[AdminDashboard] Timestamp changed: ${lastSeenTimestampRef.current} -> ${currentTimestamp}`)
+          lastSeenTimestampRef.current = currentTimestamp
+          hasReassignedForThisTimestampRef.current = false
+        }
+
+        // If we've already reassigned for this timestamp, don't reassign again
+        if (hasReassignedForThisTimestampRef.current) {
+          return
+        }
+
+        const now = Date.now()
+        const lastAssignedDate = new Date(lastAssigned)
+        
+        // Calculate difference - handle timezone issues
+        let diffMs = now - lastAssignedDate.getTime()
+        let diffMinutes = diffMs / (1000 * 60)
+        
+        // Handle timezone offset (same logic as Dashboard countdown)
+        if (diffMs < 0 && Math.abs(diffMinutes) > 400 && Math.abs(diffMinutes) < 500) {
+          const timezoneOffsetMinutes = 480 // PST is UTC-8
+          const actualElapsedMs = diffMs + (timezoneOffsetMinutes * 60 * 1000)
+          diffMinutes = actualElapsedMs / (1000 * 60)
+        } else if (diffMinutes < 0) {
+          diffMinutes = Math.abs(diffMinutes)
+        }
+        
+        // Get the refresh interval from the active session
+        const reassignmentIntervalMinutes = activeSession?.mission_refresh_interval_minutes || 15
+        const elapsedMinutes = diffMinutes
+        
+        // Debug logging
+        if (elapsedMinutes >= reassignmentIntervalMinutes * 0.9) {
+          console.log(`[AdminDashboard] Check: ${elapsedMinutes.toFixed(2)} minutes elapsed, interval: ${reassignmentIntervalMinutes} minutes, needs reassignment: ${elapsedMinutes >= reassignmentIntervalMinutes}`)
+        }
+        
+        // Only reassign if elapsed time >= interval AND we haven't already reassigned for this timestamp
+        if (elapsedMinutes >= reassignmentIntervalMinutes && !hasReassignedForThisTimestampRef.current) {
+          console.log(`[AdminDashboard] Auto-reassigning missions: ${elapsedMinutes.toFixed(1)} minutes elapsed (interval: ${reassignmentIntervalMinutes} minutes)`)
+          
+          // Mark that we've reassigned for this timestamp (optimistically)
+          // If another admin succeeds first, the timestamp will change and we'll reset on next check
+          hasReassignedForThisTimestampRef.current = true
+          
+          setRefreshingMissions(true)
+          try {
+            const result = await neonApi.resetAndAssignAllMissions()
+            
+            // If lock acquisition failed, another admin is handling it
+            // This is fine - they'll update the timestamp and we'll see it on the next check
+            if (!result.success && result.reason?.includes('lock')) {
+              console.log('[AdminDashboard] Another admin acquired lock first, skipping reassignment')
+              // Reset flag - when timestamp updates, we'll reset properly on next check
+              hasReassignedForThisTimestampRef.current = false
+              return
+            }
+            
+            if (!result.success) {
+              console.error('[AdminDashboard] Reassignment failed:', result.reason)
+              hasReassignedForThisTimestampRef.current = false
+              return
+            }
+            
+            // Reload sessions (which will reload active session data) instead of calling loadActiveSessionData directly
+            // This prevents infinite loops by using the same update path as manual actions
+            await loadSessions()
+            console.log(`[AdminDashboard] Auto-reassignment completed successfully: ${result.missionsAssigned} missions assigned`)
+          } catch (error) {
+            console.error('[AdminDashboard] Error during auto-reassignment:', error)
+            // Reset flag on error so we can retry
+            hasReassignedForThisTimestampRef.current = false
+            // Don't show alert for automatic reassignment failures
+          } finally {
+            setRefreshingMissions(false)
+          }
+        }
+      } catch (error) {
+        console.error('[AdminDashboard] Error checking for auto-reassignment:', error)
+      }
+    }
+
+    // Don't check immediately - wait a bit to avoid checking right after session start
+    // Check after 10 seconds, then every 5 seconds
+    let intervalId = null
+    const initialTimeout = setTimeout(() => {
+      checkAndReassign()
+      intervalId = setInterval(checkAndReassign, 5000) // Check every 5 seconds
+    }, 10000)
+
+    return () => {
+      clearTimeout(initialTimeout)
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSession?.id, refreshingMissions, loadingSessionData]) // Only depend on session ID, not entire object
 
   const loadSessions = async () => {
     try {

@@ -193,7 +193,54 @@ export async function startSession(sessionId) {
     `
 
     // Now assign missions to the selected users
-    await assignMissionsToSessionUsers(userIdsArray)
+    // Retry assignment if lock is held (up to 5 times with exponential backoff)
+    let assignmentResult = null
+    let retries = 0
+    const maxRetries = 5
+    const baseDelayMs = 200
+    
+    while (retries < maxRetries) {
+      assignmentResult = await assignMissionsToSessionUsers(userIdsArray)
+      
+      if (assignmentResult.success) {
+        break
+      }
+      
+      // If lock is held, wait and retry
+      if (assignmentResult.reason?.includes('lock')) {
+        retries++
+        if (retries < maxRetries) {
+          const delayMs = baseDelayMs * Math.pow(2, retries - 1)
+          console.log(`Lock held, retrying assignment in ${delayMs}ms (attempt ${retries + 1}/${maxRetries})`)
+          await new Promise(resolve => setTimeout(resolve, delayMs))
+          continue
+        }
+      }
+      
+      // For other errors, break immediately
+      break
+    }
+    
+    // Check if missions were actually assigned
+    if (!assignmentResult.success) {
+      // Rollback session status if mission assignment failed
+      await sql`
+        UPDATE sessions
+        SET status = 'draft', started_at = NULL
+        WHERE id = ${sessionId}
+      `
+      throw new Error(`Failed to assign missions after ${retries} retries: ${assignmentResult.reason || 'Unknown error'}`)
+    }
+    
+    if (assignmentResult.missionsAssigned === 0) {
+      // Rollback session status if no missions were assigned
+      await sql`
+        UPDATE sessions
+        SET status = 'draft', started_at = NULL
+        WHERE id = ${sessionId}
+      `
+      throw new Error('No missions were assigned. Please check that there are available missions.')
+    }
     
     // Get updated session
     const updatedSession = await sql`
