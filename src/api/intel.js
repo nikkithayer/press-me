@@ -1,17 +1,6 @@
 import { sql } from './db.js';
 import { getActiveSession } from './sessions.js';
 
-// Get intel clues
-export async function getIntel() {
-  try {
-    const result = await sql`SELECT * FROM intel ORDER BY id`;
-    return result;
-  } catch (error) {
-    console.error('Error fetching intel:', error);
-    throw error;
-  }
-}
-
 // Get all intel for a specific agent (from agent_intel table)
 export async function getAgentIntel(agentId) {
   try {

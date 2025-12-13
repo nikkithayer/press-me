@@ -24,56 +24,6 @@ export async function getObjectMissionsForAgent(agentId) {
   }
 }
 
-// Assign object missions - similar pattern to book/passphrase missions
-export async function assignObjectMissions() {
-  try {
-    // Get available agents
-    const users = (await sql`SELECT id FROM users WHERE ishere = true`).map(u => u.id)
-    if (users.length === 0) return { assigned: 0 }
-
-    // Fetch missions with previous assignments
-    const missions = await sql`SELECT id, past_assigned_agents FROM object_missions WHERE completed = false ORDER BY id`
-
-    // Current assignment counts per user (cap at 3 total across all mission types)
-    const objectCounts = await sql`SELECT assigned_agent AS user_id, COUNT(*)::int AS cnt FROM object_missions WHERE assigned_agent IS NOT NULL AND completed = false GROUP BY assigned_agent`
-    const objectCountMap = new Map(objectCounts.map(r => [r.user_id, Number(r.cnt)]))
-
-    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
-    let updates = 0
-
-    for (const m of missions) {
-      const prevAssigned = Array.isArray(m.past_assigned_agents) ? m.past_assigned_agents : []
-      
-      // Check if mission is already assigned
-      const currentAssignment = await sql`SELECT assigned_agent FROM object_missions WHERE id = ${m.id}`
-      if (currentAssignment[0]?.assigned_agent) {
-        continue // Skip if already assigned
-      }
-
-      const eligibleUsers = users.filter(id => !prevAssigned.includes(id) && (objectCountMap.get(id) || 0) < 3)
-      
-      if (eligibleUsers.length > 0) {
-        const userId = pick(eligibleUsers)
-        
-        await sql`
-          UPDATE object_missions
-          SET assigned_agent = ${userId},
-              past_assigned_agents = array_append(COALESCE(past_assigned_agents, ARRAY[]::integer[]), ${userId}),
-              assigned_now = true
-          WHERE id = ${m.id}
-        `
-        updates++
-        objectCountMap.set(userId, (objectCountMap.get(userId) || 0) + 1)
-      }
-    }
-
-    return { assigned: updates }
-  } catch (error) {
-    console.error('Error assigning object missions (Neon):', error)
-    throw error
-  }
-}
-
 // Complete an object mission
 export async function completeObjectMission(missionId, answer, agentId) {
   try {

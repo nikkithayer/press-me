@@ -736,16 +736,3 @@ export async function getLastAssignmentTimestamp() {
   }
 }
 
-export async function updateAssignmentTimestamp() {
-  try {
-    await sql`
-      INSERT INTO assignment_timestamp (id, last_assigned_at)
-      VALUES (1, NOW())
-      ON CONFLICT (id) 
-      DO UPDATE SET last_assigned_at = NOW()
-    `;
-    return true;
-  } catch (error) {
-    throw error;
-  }
-}

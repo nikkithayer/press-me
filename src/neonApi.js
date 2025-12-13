@@ -18,9 +18,6 @@ import * as voting from './api/voting.js';
 export const neonApi = {
   // Users
   getUsers: users.getUsers,
-  getRandomUser: users.getRandomUser,
-  getUsersByTeam: users.getUsersByTeam,
-  getRandomTeamMember: users.getRandomTeamMember,
   getUserScore: users.getUserScore,
   
   // Teams
@@ -34,36 +31,26 @@ export const neonApi = {
   getLoginStats: auth.getLoginStats,
   
   // Intel
-  getIntel: intel.getIntel,
   getAgentIntel: intel.getAgentIntel,
   addIntel: intel.addIntel,
   clearAgentIntel: intel.clearAgentIntel,
   generateRandomIntel: intel.generateRandomIntel,
   
   // Missions (general)
-  getMissions: missions.getMissions,
-  getAvailableMissions: missions.getAvailableMissions,
-  refreshMissions: missions.refreshMissions,
-  assignMission: missions.assignMission,
-  completeMission: missions.completeMission,
   getAllMissionsForAgent: missions.getAllMissionsForAgent,
   
   // Book Missions
   getBookMissionsForAgent: bookMissions.getBookMissionsForAgent,
-  assignBookMissions: bookMissions.assignBookMissions,
-  resetAndAssignBookMissions: bookMissions.resetAndAssignBookMissions,
   completeBookMission: bookMissions.completeBookMission,
   adminCompleteBookMission: bookMissions.adminCompleteBookMission,
   
   // Passphrase Missions
   getPassphraseMissionsForAgent: passphraseMissions.getPassphraseMissionsForAgent,
-  assignPassphraseMissions: passphraseMissions.assignPassphraseMissions,
   completePassphraseMission: passphraseMissions.completePassphraseMission,
   adminCompletePassphraseMission: passphraseMissions.adminCompletePassphraseMission,
   
   // Object Missions
   getObjectMissionsForAgent: objectMissions.getObjectMissionsForAgent,
-  assignObjectMissions: objectMissions.assignObjectMissions,
   completeObjectMission: objectMissions.completeObjectMission,
   adminCompleteObjectMission: objectMissions.adminCompleteObjectMission,
   
@@ -89,7 +76,6 @@ export const neonApi = {
   assignMissionsToSessionUsers: assignments.assignMissionsToSessionUsers,
   resetAndAssignAllMissions: assignments.resetAndAssignAllMissions,
   getLastAssignmentTimestamp: assignments.getLastAssignmentTimestamp,
-  updateAssignmentTimestamp: assignments.updateAssignmentTimestamp,
   
   // Voting
   hasSubmittedIntel: voting.hasSubmittedIntel,
