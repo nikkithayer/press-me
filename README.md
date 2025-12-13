@@ -77,12 +77,20 @@ npm run dev
 The application runs on: http://localhost:5173
 
 ### 5. Access the Game
+
+**For Regular Players:**
 1. Open http://localhost:5173 in your browser
 2. Enter your agent alias (e.g., "Swift Spider", "Invisible Mouse", or "Swift_Spider")
 3. You'll be redirected to the passphrase entry page (`/login/{encodedAlias}`). This allows you to have users skip steps 1 and 2 when given a QRcode or NFC with their unique agent login.
 4. Enter your passphrase (you'll see a hint showing all words except the last word)
 5. After successful authentication, you'll be taken to the dashboard
 6. View your mission briefing by navigating to the mission page (if needed)
+
+**For Admins:**
+1. Navigate to http://localhost:5173/admin/login
+2. Enter your full name (e.g., "David Daw" or "Nikki Thayer")
+3. Enter your passphrase when prompted
+4. You'll be taken to the Admin Dashboard where you can create and manage game sessions
 
 ## 🎮 How to Play
 
@@ -120,6 +128,98 @@ The application runs on: http://localhost:5173
 - **Red Team** vs **Blue Team**
 - Complete missions to earn points for your team
 - Track team progress and compete for victory
+
+## 👨‍💼 Admin Panel
+
+### Admin Login
+
+Admins have a separate login flow using their real names instead of aliases.
+
+**Step 1: Access Admin Login**
+- Navigate to `/admin/login` in your browser
+- Or click the "ADMIN" button on the dashboard (if you're already logged in as an admin)
+
+**Step 2: Enter Your Full Name**
+- Enter your full name: "First Last" (e.g., "David Daw" or "Nikki Thayer")
+- The system validates that you are an admin user
+- If valid, you'll be redirected to the passphrase entry page
+
+**Step 3: Enter Passphrase**
+- You'll see a hint showing all words of your passphrase except the last word
+- Enter the last word of your passphrase to complete authentication
+- After successful authentication, you'll be taken to the Admin Dashboard
+
+**Admin Users:**
+- Admin status is stored in the database (`is_admin` field)
+- Only users with `is_admin = true` can access the admin panel
+- Default admin users: David Daw (Swift Spider) and Nikki Thayer (Normal Hawk)
+
+### Creating and Starting a Session
+
+**1. Create a New Session**
+- Click "Create New Session" button in the Admin Dashboard
+- Enter a session name (e.g., "Game Night - January 2024")
+- Set the mission refresh interval (default: 15 minutes)
+  - This determines how often missions will be reassigned to players
+- Select players to include in the session
+  - Use "Select All" to quickly select all active players
+  - Or individually check/uncheck players
+- Click "Create Session"
+- The session will be created in "draft" status
+
+**2. Start the Session**
+- Find your session in the sessions list
+- Click "Start Session" button
+- Confirm the action
+- The system will:
+  - Change session status to "active"
+  - Assign missions to all selected players
+  - Begin tracking mission completion
+  - Start the mission refresh timer
+
+**3. Managing Active Sessions**
+
+**View Session Data:**
+- When a session is active, you'll see:
+  - Session participants and their assigned missions
+  - Mission completion status for each player
+  - Countdown timer for next mission reassignment
+  - Refresh button to manually reload session data
+
+**Session Controls:**
+- **Open/Close Voting**: Control whether players can submit intel
+- **Pause Session**: Temporarily pause the session (missions won't refresh)
+- **End Session**: Permanently end the session
+- **Reset Session**: Clear all missions, completions, and intel (use with caution!)
+
+**4. Editing Sessions**
+- Draft, paused, or ended sessions can be edited
+- Click "Edit" to modify:
+  - Session name
+  - Mission refresh interval
+  - Participant list
+- Active sessions cannot be edited (pause or end first)
+
+**5. Mission Management**
+
+**Automatic Reassignment:**
+- Missions automatically reassign based on the refresh interval
+- The countdown timer shows when the next reassignment will occur
+- Reassignments happen automatically in the background
+
+**Manual Mission Completion:**
+- Admins can manually complete missions for players
+- Click "Complete Mission" on any uncompleted mission
+- Confirm the action
+- The player will receive intel (if applicable) and the mission will be marked complete
+
+**6. Session Statuses**
+
+- **Draft**: Session created but not started (can be edited)
+- **Active**: Session is running (missions assigned, timer active)
+- **Paused**: Session temporarily paused (can be resumed or ended)
+- **Ended**: Session permanently ended (can be edited or reset)
+
 
 ## 🛠️ Development
 
@@ -160,7 +260,7 @@ The `server/` folder contains utility scripts for database setup and maintenance
 The database includes the following tables:
 
 **Core Tables:**
-- `users` - Agent information (firstname, lastname, alias_1, alias_2, team, passphrase, score)
+- `users` - Agent information (firstname, lastname, alias_1, alias_2, team, passphrase, score, is_admin)
 - `missions` - Legacy mission system
 - `teams` - Team information and points
 - `intel` - Intelligence clues

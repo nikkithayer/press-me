@@ -28,6 +28,8 @@ export const neonApi = {
   logLogin: auth.logLogin,
   validateAlias: auth.validateAlias,
   authenticate: auth.authenticate,
+  validateAdminName: auth.validateAdminName,
+  authenticateAdmin: auth.authenticateAdmin,
   getLoginStats: auth.getLoginStats,
   
   // Intel

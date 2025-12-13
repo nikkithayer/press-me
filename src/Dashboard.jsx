@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { neonApi } from './neonApi'
+import { isAdmin } from './utils/admin.js'
 
-function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, team, onLogout }) {
+function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, team, onLogout, currentUser }) {
   const navigate = useNavigate()
   const [missions, setMissions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1698,12 +1699,9 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
               </div>
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              {((alias1 === 'Swift' && alias2 === 'Spider') || 
-                (firstName === 'David' && lastName === 'Daw') ||
-                (alias1 === 'Normal' && alias2 === 'Hawk') ||
-                (firstName === 'Nikki' && lastName === 'Thayer')) && (
+              {isAdmin(currentUser) && (
                 <button 
-                  onClick={() => navigate('/admin')} 
+                  onClick={() => navigate('/admin/login')} 
                   className="admin-button button-min"
                   style={{ marginRight: '10px' }}
                 >

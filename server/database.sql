@@ -14,6 +14,7 @@ CREATE TABLE users (
     alias_1 VARCHAR(50) NOT NULL,
     alias_2 VARCHAR(50) NOT NULL,
     passphrase TEXT NOT NULL,
+    is_admin BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -61,19 +62,19 @@ CREATE TABLE login_logs (
 );
 
 -- Insert users with new format
-INSERT INTO users (id, firstname, lastname, team, ishere, alias_1, alias_2, passphrase) VALUES
-    (1, 'Nikki', 'Thayer', 'red', true, 'Normal', 'Hawk', 'Winter must be cold.'),
-    (2, 'David', 'Daw', 'blue', true, 'Swift', 'Spider', 'Not every bird is an eagle.'),
-    (3, 'Bhavna', 'Devani', 'red', true, 'Invisible', 'Mouse', 'Have you ever been to Cleveland in August?'),
-    (4, 'Peter', 'Munters', 'blue', true, 'Hidden', 'Jewel', 'She wore a green hat by the river.'),
-    (5, 'Katherine', 'Ramos', 'red', true, 'Exploding', 'Panther', 'A gold room is nothing to sneeze at.'),
-    (6, 'Dominic', 'Ferantelli', 'blue', true, 'Fast', 'Jaguar', 'Alf ate cats.'),
-    (7, 'Jane', 'St. John', 'red', true, 'Tranquil', 'Diamond', 'The pope has a dairy allergy.'),
-    (8, 'Andrew', 'Fernandez', 'blue', true, 'Ominous', 'Lizard', 'Cardboard makes me sleepy.'),
-    (9, 'Brett', 'Jackson', 'red', true, 'Impossible', 'Dealer', 'The piano has been compromised.'),
-    (10, 'Richard', 'Malena', 'blue', true, 'Cool', 'Operator', 'The thorn of the blue rose is the sharpest.'),
-    (11, 'Amanda', 'Rodriguez', 'red', true, 'Drunken', 'Player', 'A knight is nothing without a jester.'),
-    (12, 'Alex', 'Wawro', 'blue', true, 'Smooth', 'Infiltrator', 'Three birds are better than one.');
+INSERT INTO users (id, firstname, lastname, team, ishere, alias_1, alias_2, passphrase, is_admin) VALUES
+    (1, 'Nikki', 'Thayer', 'red', true, 'Normal', 'Hawk', 'Winter must be cold.', true),
+    (2, 'David', 'Daw', 'blue', true, 'Swift', 'Spider', 'Not every bird is an eagle.', true),
+    (3, 'Bhavna', 'Devani', 'red', true, 'Invisible', 'Mouse', 'Have you ever been to Cleveland in August?', false),
+    (4, 'Peter', 'Munters', 'blue', true, 'Hidden', 'Jewel', 'She wore a green hat by the river.', false),
+    (5, 'Katherine', 'Ramos', 'red', true, 'Exploding', 'Panther', 'A gold room is nothing to sneeze at.', false),
+    (6, 'Dominic', 'Ferantelli', 'blue', true, 'Fast', 'Jaguar', 'Alf ate cats.', false),
+    (7, 'Jane', 'St. John', 'red', true, 'Tranquil', 'Diamond', 'The pope has a dairy allergy.', false),
+    (8, 'Andrew', 'Fernandez', 'blue', true, 'Ominous', 'Lizard', 'Cardboard makes me sleepy.', false),
+    (9, 'Brett', 'Jackson', 'red', true, 'Impossible', 'Dealer', 'The piano has been compromised.', false),
+    (10, 'Richard', 'Malena', 'blue', true, 'Cool', 'Operator', 'The thorn of the blue rose is the sharpest.', false),
+    (11, 'Amanda', 'Rodriguez', 'red', true, 'Drunken', 'Player', 'A knight is nothing without a jester.', false),
+    (12, 'Alex', 'Wawro', 'blue', true, 'Smooth', 'Infiltrator', 'Three birds are better than one.', false);
 
 -- Create indexes for better performance
 CREATE INDEX idx_users_alias_1 ON users(alias_1);
