@@ -21,29 +21,14 @@ const sql = neon(DATABASE_URL);
 
 async function setupNeonDatabase() {
   try {
-    console.log('Setting up Neon database...');
-    
+    console.log('Setting up Neon database (non-destructive)...');
     console.log('Connected to Neon database');
-    
-    // Drop and recreate tables to ensure clean schema
-    console.log('Creating/updating tables...');
-    
-    await sql`DROP TABLE IF EXISTS users CASCADE`;
-    await sql`DROP TABLE IF EXISTS missions CASCADE`;
-    await sql`DROP TABLE IF EXISTS intel CASCADE`;
-    await sql`DROP TABLE IF EXISTS teams CASCADE`;
-    await sql`DROP TABLE IF EXISTS toys CASCADE`;
-    await sql`DROP TABLE IF EXISTS login_logs CASCADE`;
-    await sql`DROP TABLE IF EXISTS agent_intel CASCADE`;
-    await sql`DROP TABLE IF EXISTS book_missions CASCADE`;
-    await sql`DROP TABLE IF EXISTS object_missions CASCADE`;
-    await sql`DROP TABLE IF EXISTS passphrase_missions CASCADE`;
-    await sql`DROP TABLE IF EXISTS sessions CASCADE`;
-    await sql`DROP TABLE IF EXISTS assignment_timestamp CASCADE`;
-    
-    // Create tables
+
+    // Create tables if they don't exist — no DROP statements
+    console.log('Creating tables if not present...');
+
     await sql`
-      CREATE TABLE users (
+      CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY,
         firstname VARCHAR(50) NOT NULL,
         lastname VARCHAR(50) NOT NULL,
@@ -57,17 +42,17 @@ async function setupNeonDatabase() {
         score INTEGER DEFAULT 0
       )
     `;
-    
+
     await sql`
-      CREATE TABLE intel (
+      CREATE TABLE IF NOT EXISTS intel (
         id SERIAL PRIMARY KEY,
         clue_text TEXT NOT NULL,
         agents_who_know INTEGER[]
       )
     `;
-    
+
     await sql`
-      CREATE TABLE missions (
+      CREATE TABLE IF NOT EXISTS missions (
         id INTEGER PRIMARY KEY,
         title TEXT NOT NULL,
         completed BOOLEAN DEFAULT FALSE,
@@ -80,25 +65,25 @@ async function setupNeonDatabase() {
         type VARCHAR(20)
       )
     `;
-    
+
     await sql`
-      CREATE TABLE teams (
+      CREATE TABLE IF NOT EXISTS teams (
         id SERIAL PRIMARY KEY,
         name VARCHAR(10) UNIQUE NOT NULL,
         points INTEGER DEFAULT 0
       )
     `;
-    
+
     await sql`
-      CREATE TABLE toys (
+      CREATE TABLE IF NOT EXISTS toys (
         id SERIAL PRIMARY KEY,
         name VARCHAR(50) NOT NULL,
         points INTEGER DEFAULT 0
       )
     `;
-    
+
     await sql`
-      CREATE TABLE login_logs (
+      CREATE TABLE IF NOT EXISTS login_logs (
         id SERIAL PRIMARY KEY,
         agent_name VARCHAR(50) NOT NULL,
         success BOOLEAN NOT NULL,
@@ -108,9 +93,8 @@ async function setupNeonDatabase() {
       )
     `;
 
-    // Create agent_intel table
     await sql`
-      CREATE TABLE agent_intel (
+      CREATE TABLE IF NOT EXISTS agent_intel (
         id SERIAL PRIMARY KEY,
         agent_id INTEGER NOT NULL,
         alias VARCHAR(50) NOT NULL,
@@ -121,9 +105,8 @@ async function setupNeonDatabase() {
       )
     `;
 
-    // Create book_missions table (complete schema)
     await sql`
-      CREATE TABLE book_missions (
+      CREATE TABLE IF NOT EXISTS book_missions (
         id INTEGER PRIMARY KEY,
         book VARCHAR,
         clue_red VARCHAR,
@@ -139,9 +122,8 @@ async function setupNeonDatabase() {
       )
     `;
 
-    // Create object_missions table
     await sql`
-      CREATE TABLE object_missions (
+      CREATE TABLE IF NOT EXISTS object_missions (
         id INTEGER PRIMARY KEY,
         title VARCHAR,
         mission_body TEXT,
@@ -153,9 +135,8 @@ async function setupNeonDatabase() {
       )
     `;
 
-    // Create passphrase_missions table
     await sql`
-      CREATE TABLE passphrase_missions (
+      CREATE TABLE IF NOT EXISTS passphrase_missions (
         id INTEGER PRIMARY KEY,
         passphrase_template VARCHAR,
         correct_answer VARCHAR,
@@ -169,9 +150,8 @@ async function setupNeonDatabase() {
       )
     `;
 
-    // Create sessions table
     await sql`
-      CREATE TABLE sessions (
+      CREATE TABLE IF NOT EXISTS sessions (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         status VARCHAR(20) NOT NULL DEFAULT 'draft',
@@ -188,44 +168,225 @@ async function setupNeonDatabase() {
       )
     `;
 
-    // Create assignment_timestamp table
     await sql`
-      CREATE TABLE assignment_timestamp (
+      CREATE TABLE IF NOT EXISTS assignment_timestamp (
         id INTEGER PRIMARY KEY,
         last_assigned_at TIMESTAMP,
         currently_updating BOOLEAN DEFAULT FALSE
       )
     `;
-    
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS phase_missions (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER NOT NULL REFERENCES sessions(id),
+        phase INTEGER NOT NULL CHECK (phase IN (1, 2, 3)),
+        title TEXT NOT NULL,
+        mission_body TEXT NOT NULL,
+        completion_type VARCHAR(10) NOT NULL CHECK (completion_type IN ('phrase', 'signoff')),
+        success_key TEXT,
+        signoff_prompt_template TEXT,
+        variable_pool JSONB,
+        signer_constraint VARCHAR(20) CHECK (signer_constraint IN ('any', 'new_signer', 'same_signer', 'admin_only')),
+        same_signer_mission_id INTEGER REFERENCES phase_missions(id),
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS player_missions (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER NOT NULL REFERENCES sessions(id),
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        mission_id INTEGER NOT NULL REFERENCES phase_missions(id),
+        variable_value TEXT,
+        completed BOOLEAN DEFAULT false,
+        completed_at TIMESTAMP,
+        signed_off_by INTEGER REFERENCES users(id),
+        signed_off_at TIMESTAMP,
+        phrase_answer TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(session_id, user_id, mission_id)
+      )
+    `;
+
+    console.log('✓ Tables verified');
+
+    // Ensure every expected column exists on every table.
+    // Safe no-ops when the column is already present.
+    console.log('Ensuring all columns exist...');
+
+    // users
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS firstname VARCHAR(50)`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS lastname VARCHAR(50)`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS team VARCHAR(4)`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS ishere BOOLEAN DEFAULT true`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS alias_1 VARCHAR(50)`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS alias_2 VARCHAR(50)`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS passphrase TEXT`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS score INTEGER DEFAULT 0`;
+
+    // missions
+    await sql`ALTER TABLE missions ADD COLUMN IF NOT EXISTS title TEXT`;
+    await sql`ALTER TABLE missions ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE`;
+    await sql`ALTER TABLE missions ADD COLUMN IF NOT EXISTS mission_body TEXT`;
+    await sql`ALTER TABLE missions ADD COLUMN IF NOT EXISTS assigned_agent INTEGER`;
+    await sql`ALTER TABLE missions ADD COLUMN IF NOT EXISTS past_assigned_agents INTEGER[]`;
+    await sql`ALTER TABLE missions ADD COLUMN IF NOT EXISTS assigned_now BOOLEAN DEFAULT FALSE`;
+    await sql`ALTER TABLE missions ADD COLUMN IF NOT EXISTS mission_expires TIMESTAMP`;
+    await sql`ALTER TABLE missions ADD COLUMN IF NOT EXISTS success_key TEXT`;
+    await sql`ALTER TABLE missions ADD COLUMN IF NOT EXISTS type VARCHAR(20)`;
+
+    // intel
+    await sql`ALTER TABLE intel ADD COLUMN IF NOT EXISTS clue_text TEXT`;
+    await sql`ALTER TABLE intel ADD COLUMN IF NOT EXISTS agents_who_know INTEGER[]`;
+
+    // teams
+    await sql`ALTER TABLE teams ADD COLUMN IF NOT EXISTS name VARCHAR(10)`;
+    await sql`ALTER TABLE teams ADD COLUMN IF NOT EXISTS points INTEGER DEFAULT 0`;
+
+    // toys
+    await sql`ALTER TABLE toys ADD COLUMN IF NOT EXISTS name VARCHAR(50)`;
+    await sql`ALTER TABLE toys ADD COLUMN IF NOT EXISTS points INTEGER DEFAULT 0`;
+
+    // login_logs
+    await sql`ALTER TABLE login_logs ADD COLUMN IF NOT EXISTS agent_name VARCHAR(50)`;
+    await sql`ALTER TABLE login_logs ADD COLUMN IF NOT EXISTS success BOOLEAN`;
+    await sql`ALTER TABLE login_logs ADD COLUMN IF NOT EXISTS ip_address INET`;
+    await sql`ALTER TABLE login_logs ADD COLUMN IF NOT EXISTS user_agent TEXT`;
+    await sql`ALTER TABLE login_logs ADD COLUMN IF NOT EXISTS timestamp TIMESTAMP DEFAULT NOW()`;
+
+    // agent_intel
+    await sql`ALTER TABLE agent_intel ADD COLUMN IF NOT EXISTS agent_id INTEGER`;
+    await sql`ALTER TABLE agent_intel ADD COLUMN IF NOT EXISTS alias VARCHAR(50)`;
+    await sql`ALTER TABLE agent_intel ADD COLUMN IF NOT EXISTS intel_type VARCHAR(20)`;
+    await sql`ALTER TABLE agent_intel ADD COLUMN IF NOT EXISTS intel_value VARCHAR(100)`;
+    await sql`ALTER TABLE agent_intel ADD COLUMN IF NOT EXISTS position INTEGER`;
+
+    // book_missions
+    await sql`ALTER TABLE book_missions ADD COLUMN IF NOT EXISTS book VARCHAR`;
+    await sql`ALTER TABLE book_missions ADD COLUMN IF NOT EXISTS clue_red VARCHAR`;
+    await sql`ALTER TABLE book_missions ADD COLUMN IF NOT EXISTS answer_red VARCHAR`;
+    await sql`ALTER TABLE book_missions ADD COLUMN IF NOT EXISTS clue_blue VARCHAR`;
+    await sql`ALTER TABLE book_missions ADD COLUMN IF NOT EXISTS answer_blue VARCHAR`;
+    await sql`ALTER TABLE book_missions ADD COLUMN IF NOT EXISTS red_completed BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE book_missions ADD COLUMN IF NOT EXISTS blue_completed BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE book_missions ADD COLUMN IF NOT EXISTS assigned_red INTEGER`;
+    await sql`ALTER TABLE book_missions ADD COLUMN IF NOT EXISTS assigned_blue INTEGER`;
+    await sql`ALTER TABLE book_missions ADD COLUMN IF NOT EXISTS previous_reds INTEGER[]`;
+    await sql`ALTER TABLE book_missions ADD COLUMN IF NOT EXISTS previous_blues INTEGER[]`;
+
+    // object_missions
+    await sql`ALTER TABLE object_missions ADD COLUMN IF NOT EXISTS title VARCHAR`;
+    await sql`ALTER TABLE object_missions ADD COLUMN IF NOT EXISTS mission_body TEXT`;
+    await sql`ALTER TABLE object_missions ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE object_missions ADD COLUMN IF NOT EXISTS assigned_agent INTEGER`;
+    await sql`ALTER TABLE object_missions ADD COLUMN IF NOT EXISTS past_assigned_agents INTEGER[]`;
+    await sql`ALTER TABLE object_missions ADD COLUMN IF NOT EXISTS assigned_now BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE object_missions ADD COLUMN IF NOT EXISTS success_key TEXT`;
+
+    // passphrase_missions
+    await sql`ALTER TABLE passphrase_missions ADD COLUMN IF NOT EXISTS passphrase_template VARCHAR`;
+    await sql`ALTER TABLE passphrase_missions ADD COLUMN IF NOT EXISTS correct_answer VARCHAR`;
+    await sql`ALTER TABLE passphrase_missions ADD COLUMN IF NOT EXISTS incorrect_answer VARCHAR`;
+    await sql`ALTER TABLE passphrase_missions ADD COLUMN IF NOT EXISTS assigned_receiver INTEGER`;
+    await sql`ALTER TABLE passphrase_missions ADD COLUMN IF NOT EXISTS assigned_sender_1 INTEGER`;
+    await sql`ALTER TABLE passphrase_missions ADD COLUMN IF NOT EXISTS assigned_sender_2 INTEGER`;
+    await sql`ALTER TABLE passphrase_missions ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE passphrase_missions ADD COLUMN IF NOT EXISTS previous_receivers INTEGER[]`;
+    await sql`ALTER TABLE passphrase_missions ADD COLUMN IF NOT EXISTS previous_senders INTEGER[]`;
+
+    // sessions
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS name VARCHAR(100)`;
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'draft'`;
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS participant_user_ids INTEGER[] DEFAULT ARRAY[]::INTEGER[]`;
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_by INTEGER`;
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`;
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS started_at TIMESTAMP`;
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS paused_at TIMESTAMP`;
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ended_at TIMESTAMP`;
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS notes TEXT`;
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS mission_refresh_interval_minutes INTEGER DEFAULT 15`;
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS voting_open BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS current_phase INTEGER DEFAULT 0`;
+
+    // assignment_timestamp
+    await sql`ALTER TABLE assignment_timestamp ADD COLUMN IF NOT EXISTS last_assigned_at TIMESTAMP`;
+    await sql`ALTER TABLE assignment_timestamp ADD COLUMN IF NOT EXISTS currently_updating BOOLEAN DEFAULT FALSE`;
+
+    // phase_missions
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS session_id INTEGER`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS phase INTEGER`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS title TEXT`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS mission_body TEXT`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS completion_type VARCHAR(10)`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS success_key TEXT`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS signoff_prompt_template TEXT`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS variable_pool JSONB`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS signer_constraint VARCHAR(20)`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS same_signer_mission_id INTEGER`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS bounty INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE phase_missions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`;
+
+    // player_missions
+    await sql`ALTER TABLE player_missions ADD COLUMN IF NOT EXISTS session_id INTEGER`;
+    await sql`ALTER TABLE player_missions ADD COLUMN IF NOT EXISTS user_id INTEGER`;
+    await sql`ALTER TABLE player_missions ADD COLUMN IF NOT EXISTS mission_id INTEGER`;
+    await sql`ALTER TABLE player_missions ADD COLUMN IF NOT EXISTS variable_value TEXT`;
+    await sql`ALTER TABLE player_missions ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE player_missions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`;
+    await sql`ALTER TABLE player_missions ADD COLUMN IF NOT EXISTS signed_off_by INTEGER`;
+    await sql`ALTER TABLE player_missions ADD COLUMN IF NOT EXISTS signed_off_at TIMESTAMP`;
+    await sql`ALTER TABLE player_missions ADD COLUMN IF NOT EXISTS phrase_answer TEXT`;
+    await sql`ALTER TABLE player_missions ADD COLUMN IF NOT EXISTS bounty_paid BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE player_missions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`;
+
+    console.log('✓ Schema up to date');
+
+    // Create indexes
+    await sql`CREATE INDEX IF NOT EXISTS idx_users_alias_1 ON users(alias_1)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_users_alias_2 ON users(alias_2)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_users_team ON users(team)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_users_ishere ON users(ishere)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_login_logs_timestamp ON login_logs(timestamp)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_login_logs_agent_name ON login_logs(agent_name)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_missions_assigned_agent ON missions(assigned_agent)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_missions_assigned_now ON missions(assigned_now)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_book_missions_book ON book_missions(book)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_agent_intel_agent_id ON agent_intel(agent_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_agent_intel_alias ON agent_intel(alias)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_agent_intel_type ON agent_intel(intel_type)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_sessions_started_at ON sessions(started_at)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(status) WHERE status = 'active'`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_phase_missions_session ON phase_missions(session_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_phase_missions_phase ON phase_missions(session_id, phase)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_player_missions_session ON player_missions(session_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_player_missions_user ON player_missions(user_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_player_missions_mission ON player_missions(mission_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_player_missions_signoff ON player_missions(signed_off_by)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_player_missions_lookup ON player_missions(session_id, user_id, completed)`;
+
+    console.log('✓ Indexes verified');
+
+    // Seed data — ON CONFLICT DO NOTHING so existing rows are never overwritten
+    console.log('Seeding data (skipping existing rows)...');
+
     // Insert teams
     await sql`
       INSERT INTO teams (id, name, points) VALUES
         (1, 'red', 0),
         (2, 'blue', 0)
+      ON CONFLICT DO NOTHING
     `;
-    
-    // Create indexes
-    await sql`CREATE INDEX idx_users_alias_1 ON users(alias_1)`;
-    await sql`CREATE INDEX idx_users_alias_2 ON users(alias_2)`;
-    await sql`CREATE INDEX idx_users_team ON users(team)`;
-    await sql`CREATE INDEX idx_users_ishere ON users(ishere)`;
-    await sql`CREATE INDEX idx_login_logs_timestamp ON login_logs(timestamp)`;
-    await sql`CREATE INDEX idx_login_logs_agent_name ON login_logs(agent_name)`;
-    await sql`CREATE INDEX idx_missions_assigned_agent ON missions(assigned_agent)`;
-    await sql`CREATE INDEX idx_missions_assigned_now ON missions(assigned_now)`;
-    await sql`CREATE INDEX idx_book_missions_book ON book_missions(book)`;
-    await sql`CREATE INDEX idx_agent_intel_agent_id ON agent_intel(agent_id)`;
-    await sql`CREATE INDEX idx_agent_intel_alias ON agent_intel(alias)`;
-    await sql`CREATE INDEX idx_agent_intel_type ON agent_intel(intel_type)`;
-    await sql`CREATE INDEX idx_sessions_status ON sessions(status)`;
-    await sql`CREATE INDEX idx_sessions_created_at ON sessions(created_at)`;
-    await sql`CREATE INDEX idx_sessions_started_at ON sessions(started_at)`;
-    await sql`CREATE INDEX idx_sessions_active ON sessions(status) WHERE status = 'active'`;
-    
-    console.log('✓ Tables created successfully');
-    
+    console.log('✓ Teams seeded');
+
     // Insert users
-    console.log('Inserting users...');
     const users = [
       { id: 1, firstname: 'Nikki', lastname: 'Thayer', team: 'red', ishere: true, alias_1: 'Normal', alias_2: 'Hawk', passphrase: 'Winter must be cold.', is_admin: true },
       { id: 2, firstname: 'David', lastname: 'Daw', team: 'blue', ishere: true, alias_1: 'Swift', alias_2: 'Spider', passphrase: 'Not every bird is an eagle.', is_admin: true },
@@ -240,18 +401,19 @@ async function setupNeonDatabase() {
       { id: 11, firstname: 'Amanda', lastname: 'Rodriguez', team: 'red', ishere: true, alias_1: 'Drunken', alias_2: 'Player', passphrase: 'A knight is nothing without a jester.' },
       { id: 12, firstname: 'Alex', lastname: 'Wawro', team: 'blue', ishere: true, alias_1: 'Smooth', alias_2: 'Infiltrator', passphrase: 'Three birds are better than one.' }
     ];
-    
+
     for (const user of users) {
-      await sql`
-        INSERT INTO users (id, firstname, lastname, team, ishere, alias_1, alias_2, passphrase, is_admin, score) 
-        VALUES (${user.id}, ${user.firstname}, ${user.lastname}, ${user.team}, ${user.ishere}, ${user.alias_1}, ${user.alias_2}, ${user.passphrase}, ${user.is_admin}, 0)
+      const result = await sql`
+        INSERT INTO users (id, firstname, lastname, team, ishere, alias_1, alias_2, passphrase, is_admin, score)
+        VALUES (${user.id}, ${user.firstname}, ${user.lastname}, ${user.team}, ${user.ishere}, ${user.alias_1}, ${user.alias_2}, ${user.passphrase}, ${user.is_admin || false}, 0)
+        ON CONFLICT (id) DO NOTHING
       `;
+      const skipped = result.length === 0 ? ' (already exists)' : '';
       const adminLabel = user.is_admin ? ' [ADMIN]' : '';
-      console.log(`✓ Inserted user: ${user.firstname} ${user.lastname} (${user.alias_1} ${user.alias_2})${adminLabel}`);
+      console.log(`✓ User: ${user.firstname} ${user.lastname} (${user.alias_1} ${user.alias_2})${adminLabel}${skipped}`);
     }
-    
+
     // Insert missions
-    console.log('Inserting missions...');
     const missions = [
       { id: 1, title: 'Deep Cover', mission_body: 'Get [randomized player in attendance]\'s code name', completed: false, assigned_agent: null, past_assigned_agents: [], assigned_now: false, mission_expires: new Date('2025-09-25T20:00:00.000Z'), success_key: '[any codename]', type: 'social' },
       { id: 2, title: 'Word Narc', mission_body: 'Change the message board on the bookshelf to read "Cheat to win." Write down the remaining letter. Give the letter to your hosts.', completed: false, assigned_agent: null, past_assigned_agents: [], assigned_now: false, mission_expires: new Date('2025-09-25T20:00:00.000Z'), success_key: 'k', type: 'sabotage' },
@@ -291,17 +453,17 @@ async function setupNeonDatabase() {
       { id: 36, title: 'Sweet Jesus', mission_body: 'There\'s a painting of a church. What is the name of the church?', completed: false, assigned_agent: null, past_assigned_agents: [], assigned_now: false, mission_expires: new Date('2025-09-25T20:00:00.000Z'), success_key: 'Notre Dame', type: 'object' },
       { id: 37, title: 'Easy Trust', mission_body: 'Find someone on your team and enter their codename.', completed: false, assigned_agent: null, past_assigned_agents: [], assigned_now: false, mission_expires: new Date('2025-09-25T20:00:00.000Z'), success_key: '[any codename from your team]', type: 'team' }
     ];
-    
+
     for (const mission of missions) {
       await sql`
-        INSERT INTO missions (id, title, mission_body, completed, assigned_agent, past_assigned_agents, assigned_now, mission_expires, success_key, type) 
+        INSERT INTO missions (id, title, mission_body, completed, assigned_agent, past_assigned_agents, assigned_now, mission_expires, success_key, type)
         VALUES (${mission.id}, ${mission.title}, ${mission.mission_body}, ${mission.completed}, ${mission.assigned_agent}, ${mission.past_assigned_agents}, ${mission.assigned_now}, ${mission.mission_expires}, ${mission.success_key}, ${mission.type})
+        ON CONFLICT (id) DO NOTHING
       `;
-      console.log(`✓ Inserted mission: ${mission.title}`);
     }
-    
-    // Insert book missions seed data
-    console.log('Inserting book missions...');
+    console.log(`✓ ${missions.length} missions seeded`);
+
+    // Insert book missions
     const bookMissions = [
       { id: 1,  book: 'Fiasco',                     clue_red: 'Page 37, last word',                answer_red: 'Aftermath',           clue_blue: 'Page 29, last word',                answer_blue: 'Bold' },
       { id: 2,  book: 'Atlas Obscura',              clue_red: 'Page 269 Longitude',                answer_red: '76.044741',           clue_blue: 'Page 335 Longitude',               answer_blue: '89.768549' },
@@ -325,12 +487,12 @@ async function setupNeonDatabase() {
       await sql`
         INSERT INTO book_missions (id, book, clue_red, answer_red, clue_blue, answer_blue, assigned_red, assigned_blue, previous_reds, previous_blues)
         VALUES (${bm.id}, ${bm.book}, ${bm.clue_red}, ${bm.answer_red}, ${bm.clue_blue}, ${bm.answer_blue}, ${null}, ${null}, ${[]}, ${[]})
+        ON CONFLICT (id) DO NOTHING
       `;
     }
-    console.log(`✓ Inserted ${bookMissions.length} book missions`);
+    console.log(`✓ ${bookMissions.length} book missions seeded`);
 
-    // Insert passphrase missions seed data
-    console.log('Inserting passphrase missions...');
+    // Insert passphrase missions
     const passphraseMissions = [
       { id: 1,  passphrase_template: 'They say the ___ on the Spanish plains are beautiful.',        correct_answer: 'stars',    incorrect_answer: 'trees' },
       { id: 2,  passphrase_template: 'The fountain in ___ runs dry at midnight.',                     correct_answer: 'Rome',     incorrect_answer: 'London' },
@@ -350,12 +512,12 @@ async function setupNeonDatabase() {
       await sql`
         INSERT INTO passphrase_missions (id, passphrase_template, correct_answer, incorrect_answer, assigned_receiver, assigned_sender_1, assigned_sender_2, previous_receivers, previous_senders)
         VALUES (${pm.id}, ${pm.passphrase_template}, ${pm.correct_answer}, ${pm.incorrect_answer}, ${null}, ${null}, ${null}, ${[]}, ${[]})
+        ON CONFLICT (id) DO NOTHING
       `;
     }
-    console.log(`✓ Inserted ${passphraseMissions.length} passphrase missions`);
+    console.log(`✓ ${passphraseMissions.length} passphrase missions seeded`);
 
-    // Insert object missions seed data
-    console.log('Inserting object missions...');
+    // Insert object missions
     const objectMissions = [
       { id: 4, title: "Situational Awareness", mission_body: "Complete this sentence: \"The room is full of spiders. But I am\"", success_key: "doing fine." },
       { id: 8, title: "Night of the Hunter", mission_body: "There's a picture of a man with a tattoo on his hand. What does the tattoo say?", success_key: "Hate" },
@@ -372,26 +534,22 @@ async function setupNeonDatabase() {
       await sql`
         INSERT INTO object_missions (id, title, mission_body, completed, assigned_agent, past_assigned_agents, assigned_now, success_key)
         VALUES (${om.id}, ${om.title}, ${om.mission_body}, false, ${null}, ${[]}, false, ${om.success_key})
+        ON CONFLICT (id) DO NOTHING
       `;
     }
-    console.log(`✓ Inserted ${objectMissions.length} object missions`);
+    console.log(`✓ ${objectMissions.length} object missions seeded`);
 
-    // Initialize assignment_timestamp table
+    // Initialize assignment_timestamp
     await sql`
       INSERT INTO assignment_timestamp (id, last_assigned_at, currently_updating)
       VALUES (1, NOW(), FALSE)
+      ON CONFLICT (id) DO NOTHING
     `;
-    console.log('✓ Initialized assignment_timestamp table');
+    console.log('✓ Assignment timestamp verified');
 
-    console.log('✓ Database setup completed successfully!');
-    console.log('✓ Users inserted:', users.length);
-    console.log('✓ Missions inserted:', missions.length);
-    console.log('✓ Book missions inserted:', bookMissions.length);
-    console.log('✓ Passphrase missions inserted:', passphraseMissions.length);
-    console.log('✓ Object missions inserted:', objectMissions.length);
-    console.log('✓ Teams created: red, blue');
+    console.log('\n✓ Database setup completed successfully (no data was overwritten)!');
     console.log('\nYou can now start the server with: npm start');
-    
+
   } catch (err) {
     console.error('Error setting up database:', err);
     process.exit(1);

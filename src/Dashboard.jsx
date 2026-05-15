@@ -16,6 +16,13 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
   const [completedMissions, setCompletedMissions] = useState(new Set())
   const [activeTab, setActiveTab] = useState('missions')
   const [missionErrors, setMissionErrors] = useState({})
+
+  // Phase mission state
+  const [activeSessionId, setActiveSessionId] = useState(null)
+  const [currentPhase, setCurrentPhase] = useState(0)
+  const [sessionParticipants, setSessionParticipants] = useState([])
+  const [signerUserId, setSignerUserId] = useState('')
+  const [signerPassphrase, setSignerPassphrase] = useState('')
   
   // Intel state
   const [users, setUsers] = useState([])
@@ -41,15 +48,8 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
   const [relationship, setRelationship] = useState('')
   const [alibi, setAlibi] = useState('')
 
-  // Ref to store current mission IDs for comparison (avoid recreating interval on every change)
-  const missionIdsRef = useRef(new Set())
-  // Ref to store current completion status for comparison
-  const completedStatusRef = useRef(new Map()) // Map<missionId, completed>
   // Ref to track last session ID and started_at for detecting session changes
   const lastSessionRef = useRef({ id: null, startedAt: null })
-  
-  // Countdown timer state
-  const [nextReassignmentCountdown, setNextReassignmentCountdown] = useState('Calculating...')
   
   // Modal state
   const [showModal, setShowModal] = useState(false)
@@ -65,6 +65,7 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
   const [missionIntel, setMissionIntel] = useState(null)
   const [showMissionFailed, setShowMissionFailed] = useState(false)
   const [missionFailedMessage, setMissionFailedMessage] = useState(null)
+  const [completedBounty, setCompletedBounty] = useState(0)
   const [isInActiveSession, setIsInActiveSession] = useState(false)
   const [sessionCheckLoading, setSessionCheckLoading] = useState(true)
   // Initial secret intel modal state
@@ -129,93 +130,65 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
   const openMissionModal = (missionId) => {
     setSelectedMissionId(missionId)
     setShowMissionModal(true)
-    setShowMissionSuccess(false) // Reset success state when opening modal
-    setShowMissionFailed(false) // Reset failed state when opening modal
-    setMissionErrors(prev => ({ ...prev, [missionId]: '' })) // Clear any previous errors
-    setMissionIntel(null) // Clear any previous intel
-    setMissionFailedMessage(null) // Clear failed message
+    setShowMissionSuccess(false)
+    setShowMissionFailed(false)
+    setMissionErrors(prev => ({ ...prev, [missionId]: '' }))
+    setMissionIntel(null)
+    setMissionFailedMessage(null)
+    setCompletedBounty(0)
+
+    const mission = missions.find(m => m.playerMissionId === missionId)
+    if (mission && mission.completed && !mission.bountyPaid && mission.bounty > 0) {
+      setShowMissionSuccess(true)
+      setCompletedBounty(mission.bounty)
+    }
   }
 
-  const openCompletedMissionModal = async (missionId) => {
+  const openCompletedMissionModal = async (playerMissionId) => {
     try {
-      // Get active session to filter intel to only session users
       const activeSession = await neonApi.getActiveSession()
-      if (!activeSession || !activeSession.participant_user_ids) {
-        return // No active session
-      }
-      
+      if (!activeSession || !activeSession.participant_user_ids) return
+
       const sessionUserIds = new Set(activeSession.participant_user_ids.map(id => Number(id)))
-      
-      // Fetch all intel for this agent
       const agentIntel = await neonApi.getAgentIntel(agentId)
-      
-      // Fetch all users to get user names for user intel
       const allUsers = await neonApi.getUsers()
-      
-      // Filter users to only session participants
-      const sessionUsers = allUsers.filter(user => sessionUserIds.has(user.id))
-      
-      // Build set of all aliases belonging to session users
+      const sessionUsersFiltered = allUsers.filter(user => sessionUserIds.has(user.id))
+
       const sessionAliases = new Set()
-      sessionUsers.forEach(user => {
+      sessionUsersFiltered.forEach(user => {
         sessionAliases.add(user.alias_1)
         sessionAliases.add(user.alias_2)
       })
-      
-      // Format intel similar to missionIntel format, but only for session users
+
       const formattedIntel = []
-      
       if (agentIntel && agentIntel.length > 0) {
         for (const intel of agentIntel) {
-          // For user intel, only include if the user is in the session
-          if (intel.intel_type === 'user') {
-            const userId = Number(intel.intel_value)
-            if (!sessionUserIds.has(userId)) {
-              // Skip intel about users not in the session
-              continue
-            }
-          }
-          
-          // For team intel, only include if the alias belongs to a session user
-          if (intel.intel_type === 'team') {
-            if (!sessionAliases.has(intel.alias)) {
-              // Skip team intel about aliases not in the session
-              continue
-            }
-          }
-          
+          if (intel.intel_type === 'user' && !sessionUserIds.has(Number(intel.intel_value))) continue
+          if (intel.intel_type === 'team' && !sessionAliases.has(intel.alias)) continue
+
           let user_name = null
           if (intel.intel_type === 'user') {
-            const userInfo = sessionUsers.find(u => u.id === Number(intel.intel_value))
-            if (userInfo) {
-              user_name = `${userInfo.firstname} ${userInfo.lastname}`
-            }
+            const userInfo = sessionUsersFiltered.find(u => u.id === Number(intel.intel_value))
+            if (userInfo) user_name = `${userInfo.firstname} ${userInfo.lastname}`
           }
-          
+
           formattedIntel.push({
             alias: intel.alias,
             intel_type: intel.intel_type,
             intel_value: intel.intel_value,
             position: intel.position,
-            user_name: user_name
+            user_name
           })
         }
       }
-      
-      // Open mission modal to show intel
-      setSelectedMissionId(missionId)
+
+      setSelectedMissionId(playerMissionId)
       setShowMissionModal(true)
       setShowMissionSuccess(true)
       setShowMissionFailed(false)
-      
-      // Store formatted intel (we'll modify the modal to show all intel)
-      // For now, we'll store it as an array in missionIntel
       setMissionIntel(formattedIntel.length > 0 ? formattedIntel : null)
-      
-      // Refresh intel tab data if it's already loaded
-      if (users.length > 0) {
-        fetchUsers()
-      }
+
+      if (users.length > 0) fetchUsers()
     } catch (error) {
       console.error('Error fetching intel:', error)
     }
@@ -228,9 +201,10 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
       setIsMissionClosing(false)
       setSelectedMissionId(null)
       setShowMissionSuccess(false)
-      setMissionIntel(null) // Clear intel when closing
+      setMissionIntel(null)
       setShowMissionFailed(false)
       setMissionFailedMessage(null)
+      setCompletedBounty(0)
     }, 300)
   }
 
@@ -255,46 +229,49 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
         setSessionCheckLoading(true)
         const activeSession = await neonApi.getActiveSession()
         if (activeSession && activeSession.participant_user_ids) {
-          // Convert both to numbers for comparison
           const agentIdNum = Number(agentId)
           const participantIds = activeSession.participant_user_ids.map(id => Number(id))
           const userInSession = participantIds.includes(agentIdNum)
           setIsInActiveSession(userInSession)
-          
-          // If user is not in active session, clear any missions they might have
-          if (!userInSession) {
+          setActiveSessionId(activeSession.id)
+          setCurrentPhase(activeSession.current_phase || 0)
+
+          if (userInSession) {
+            const participants = await neonApi.getSessionParticipants(activeSession.id)
+            setSessionParticipants(participants.filter(p => p.id !== agentIdNum))
+          } else {
             setMissions([])
             setLoading(false)
           }
         } else {
-          // No active session exists
           setIsInActiveSession(false)
+          setActiveSessionId(null)
+          setCurrentPhase(0)
           setMissions([])
           setLoading(false)
         }
       } catch (error) {
         console.error('Error checking active session:', error)
         setIsInActiveSession(false)
+        setActiveSessionId(null)
         setMissions([])
         setLoading(false)
       } finally {
         setSessionCheckLoading(false)
       }
     }
-    
+
     checkActiveSession()
-    getRandomBackstory() // Initialize with random backstory
+    getRandomBackstory()
   }, [agentId])
 
   useEffect(() => {
-    // Only fetch missions if user is in active session
-    if (isInActiveSession && !sessionCheckLoading) {
+    if (isInActiveSession && !sessionCheckLoading && activeSessionId) {
       fetchRandomMissions()
     } else if (!isInActiveSession) {
-      // If not in active session, clear any errors
       setError(null)
     }
-  }, [agentId, isInActiveSession, sessionCheckLoading])
+  }, [agentId, isInActiveSession, sessionCheckLoading, activeSessionId])
 
   // Clear error when missions are successfully loaded
   useEffect(() => {
@@ -545,17 +522,6 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
     }
   }, [countdown])
 
-  // Auto-check every 3 seconds for mission reassignments and updates
-  useEffect(() => {
-    // Update the refs whenever missions change
-    missionIdsRef.current = new Set(missions.map(m => m.id))
-    const completedMap = new Map()
-    missions.forEach(m => {
-      completedMap.set(m.id, m.completed || false)
-    })
-    completedStatusRef.current = completedMap
-  }, [missions])
-
   // Periodically check if user is still in active session
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -569,7 +535,12 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
               setMissions([])
             }
           }
-          
+
+          setActiveSessionId(activeSession.id)
+          if (activeSession.current_phase !== undefined) {
+            setCurrentPhase(activeSession.current_phase)
+          }
+
           // Also check if session was reset (for initial intel and intel submission clearing)
           if (userInSession && activeSession.id) {
             const sessionTimestampKey = `initialIntel_${activeSession.id}_${agentId}_started`
@@ -633,183 +604,32 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
   }, [agentId, isInActiveSession])
 
   useEffect(() => {
-    // Only auto-check missions if user is in active session
-    // NOTE: This only FETCHES missions, it does NOT reassign them
-    // Only admin panel can reassign missions
-    if (!isInActiveSession) {
-      return
-    }
-    
+    if (!isInActiveSession || !activeSessionId) return
+
     const checkMissions = async () => {
       try {
-        // Just fetch missions - don't trigger reassignment
-        const newMissions = await neonApi.getAllMissionsForAgent(agentId)
-        
-        // Clear error if missions fetch succeeds (getAllMissionsForAgent never throws, so success)
+        const playerMissions = await neonApi.getPlayerMissions(activeSessionId, agentId)
         setError(null)
-        
-        // Compare mission IDs and completion status to detect changes
-        // Use both refs and current state to handle race conditions during refreshes
-        const currentMissionIdsFromRef = missionIdsRef.current
-        const currentMissionIdsFromState = new Set(missions.map(m => m.id))
-        const newMissionIds = new Set(newMissions.map(m => m.id))
-        
-        // Check if there's a mismatch between state and refs (indicates refresh in progress)
-        const stateRefMismatch = currentMissionIdsFromRef.size !== currentMissionIdsFromState.size ||
-          [...currentMissionIdsFromState].some(id => !currentMissionIdsFromRef.has(id)) ||
-          [...currentMissionIdsFromRef].some(id => !currentMissionIdsFromState.has(id))
-        
-        // Check if mission IDs have changed (compare new missions against both state and refs)
-        const missionIdsChangedFromState = 
-          currentMissionIdsFromState.size !== newMissionIds.size ||
-          [...newMissionIds].some(id => !currentMissionIdsFromState.has(id)) ||
-          [...currentMissionIdsFromState].some(id => !newMissionIds.has(id))
-        
-        const missionIdsChangedFromRef = 
-          currentMissionIdsFromRef.size !== newMissionIds.size ||
-          [...newMissionIds].some(id => !currentMissionIdsFromRef.has(id)) ||
-          [...currentMissionIdsFromRef].some(id => !newMissionIds.has(id))
-        
-        // If state and refs don't match, or if either shows a change, consider it changed
-        const missionIdsChanged = missionIdsChangedFromState || missionIdsChangedFromRef || stateRefMismatch
-        
-        // Check if completion status has changed
-        // Build current status from actual missions state (more reliable than ref during refresh)
-        const currentCompletedStatusFromState = new Map()
-        missions.forEach(m => {
-          currentCompletedStatusFromState.set(m.id, m.completed || false)
-        })
-        const currentCompletedStatusFromRef = completedStatusRef.current
-        
-        let completionStatusChanged = false
-        
-        // Check all new missions for completion status changes
-        for (const newMission of newMissions) {
-          const currentCompletedFromState = currentCompletedStatusFromState.get(newMission.id) ?? false
-          const currentCompletedFromRef = currentCompletedStatusFromRef.get(newMission.id) ?? false
-          const newCompleted = newMission.completed || false
-          
-          // Check if completion status has changed (check both state and ref)
-          if (currentCompletedFromState !== newCompleted || currentCompletedFromRef !== newCompleted) {
-            completionStatusChanged = true
-            break
-          }
+
+        if (playerMissions && playerMissions.length > 0) {
+          setCurrentPhase(playerMissions[0].currentPhase || 0)
         }
-        
-        // Also check if any missions in state or refs are missing from new missions
-        for (const currentId of currentMissionIdsFromState) {
-          if (!newMissionIds.has(currentId)) {
-            missionIdsChanged = true
-            break
-          }
-        }
-        
-        // Always update if missions have changed (IDs, count, or completion status)
-        // This ensures old missions disappear when they're unassigned and completion status updates
-        if (missionIdsChanged || completionStatusChanged) {
-          setMissions([...newMissions]) // Use spread to ensure new array reference
-          // Update refs with new mission IDs and completion status
-          missionIdsRef.current = newMissionIds
-          const newCompletedMap = new Map()
-          newMissions.forEach(m => {
-            newCompletedMap.set(m.id, m.completed || false)
-          })
-          completedStatusRef.current = newCompletedMap
-          // Update completed missions state based on new mission data
-          const completedSet = new Set(newMissions.filter(m => m.completed).map(m => m.id))
-          setCompletedMissions(completedSet)
-          setSuccessKeys({})
-        }
+
+        setMissions(playerMissions || [])
+        const completedSet = new Set(
+          (playerMissions || []).filter(m => m.completed).map(m => m.playerMissionId)
+        )
+        setCompletedMissions(completedSet)
       } catch (error) {
-        // console.error('[AUTO-CHECK] Error checking missions:', error)
-        // console.error('[AUTO-CHECK] Error stack:', error.stack)
-        // Silently fail - don't show errors to user
-        // Only log if it's a real error (not just empty missions)
         if (error && error.message && !error.message.includes('session')) {
           console.error('[AUTO-CHECK] Error checking missions:', error)
         }
       }
     }
-    
-    // Initial check after 1 second (give time for initial load)
-    const initialTimer = setTimeout(() => {
-      checkMissions()
-    }, 1000)
-    
-    // Then check every 3 seconds (just to refresh mission state, not reassign)
-    const interval = setInterval(() => {
-      checkMissions()
-    }, 3000)
-    
-    return () => {
-      clearTimeout(initialTimer)
-      clearInterval(interval)
-    }
-  }, [agentId, isInActiveSession]) // Depend on agentId and isInActiveSession
 
-  // Countdown timer for next mission reassignment (display only - no automatic reassignment)
-  useEffect(() => {
-    const updateCountdown = async () => {
-      try {
-        const lastAssigned = await neonApi.getLastAssignmentTimestamp()
-        
-        if (!lastAssigned) {
-          setNextReassignmentCountdown('Unknown')
-          return
-        }
-        
-        const now = new Date()
-        const lastAssignedDate = new Date(lastAssigned)
-        
-        // Calculate difference - handle timezone issues same way as shouldReassignMissions
-        let diffMs = now.getTime() - lastAssignedDate.getTime()
-        let diffMinutes = diffMs / (1000 * 60)
-        
-        // Handle timezone offset (same logic as shouldReassignMissions)
-        if (diffMs < 0 && Math.abs(diffMinutes) > 400 && Math.abs(diffMinutes) < 500) {
-          const timezoneOffsetMinutes = 480 // PST is UTC-8
-          const actualElapsedMs = diffMs + (timezoneOffsetMinutes * 60 * 1000)
-          diffMinutes = actualElapsedMs / (1000 * 60)
-        } else if (diffMinutes < 0) {
-          diffMinutes = Math.abs(diffMinutes)
-        }
-        
-        // Get the refresh interval from the active session (default to 15 minutes if not set)
-        const activeSession = await neonApi.getActiveSession()
-        const reassignmentIntervalMinutes = activeSession?.mission_refresh_interval_minutes || 15
-        const elapsedMinutes = diffMinutes
-        const remainingMinutes = Math.max(0, reassignmentIntervalMinutes - elapsedMinutes)
-        
-        if (remainingMinutes <= 0) {
-          setNextReassignmentCountdown('Admin can reassign')
-        } else {
-          const totalSeconds = Math.floor(remainingMinutes * 60)
-          const minutes = Math.floor(totalSeconds / 60)
-          const seconds = totalSeconds % 60
-          
-          if (minutes > 0) {
-            setNextReassignmentCountdown(`${minutes}m ${seconds}s`)
-          } else {
-            setNextReassignmentCountdown(`${seconds}s`)
-          }
-        }
-      } catch (error) {
-        setNextReassignmentCountdown('Error calculating')
-      }
-    }
-    
-    // Update immediately
-    updateCountdown()
-    
-    // Update every second
-    const interval = setInterval(() => {
-      updateCountdown()
-    }, 1000)
-    
-    return () => {
-      clearInterval(interval)
-    }
-  }, [missions, agentId]) // Reset countdown when missions change (reassignment happened)
+    const interval = setInterval(checkMissions, 5000)
+    return () => clearInterval(interval)
+  }, [agentId, isInActiveSession, activeSessionId])
 
   const fetchUsers = async () => {
     try {
@@ -1286,41 +1106,33 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
     return () => clearInterval(timer)
   }, [missions])
 
-  const fetchRandomMissions = async (doReset = false) => {
+  const fetchRandomMissions = async () => {
     try {
       setLoading(true)
-      setError(null) // Clear any previous errors
-      // NOTE: doReset parameter is ignored - only admin panel can reassign missions
-      // Just fetch missions - don't attempt reassignment
-      let assignedMissions = await neonApi.getAllMissionsForAgent(agentId)
-      
-      // getAllMissionsForAgent always returns an array (never throws)
-      // Empty array is valid - means no missions assigned yet
-      setMissions(assignedMissions || [])
-      // Update refs with mission IDs and completion status
-      missionIdsRef.current = new Set((assignedMissions || []).map(m => m.id))
-      const completedMap = new Map()
-      (assignedMissions || []).forEach(m => {
-        completedMap.set(m.id, m.completed || false)
-      })
-      completedStatusRef.current = completedMap
-      // Set completed missions state based on mission data
-      const completedSet = new Set((assignedMissions || []).filter(m => m.completed).map(m => m.id))
+      setError(null)
+
+      if (!activeSessionId) {
+        setMissions([])
+        return
+      }
+
+      const playerMissions = await neonApi.getPlayerMissions(activeSessionId, agentId)
+      setMissions(playerMissions || [])
+
+      if (playerMissions && playerMissions.length > 0) {
+        setCurrentPhase(playerMissions[0].currentPhase || 0)
+      }
+
+      const completedSet = new Set(
+        (playerMissions || []).filter(m => m.completed).map(m => m.playerMissionId)
+      )
       setCompletedMissions(completedSet)
       setSuccessKeys({})
-      // Clear any existing errors when refreshing
       setMissionErrors({})
     } catch (error) {
-      // This should rarely be hit now since getAllMissionsForAgent doesn't throw
-      // But if it does, log it with details
       console.error('Error fetching missions:', error)
-      console.error('Error details:', error.message, error.stack)
-      // Only set error if it's a real error (not just empty missions)
       if (error && error.message) {
         setError('Failed to fetch missions: ' + error.message)
-      } else {
-        // Unknown error - but don't show error if missions fetch succeeded
-        setError(null)
       }
     } finally {
       setLoading(false)
@@ -1353,14 +1165,13 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
     }
   }
 
-  const handleSuccessKeyChange = (missionId, value) => {
+  const handleSuccessKeyChange = (playerMissionId, value) => {
     setSuccessKeys(prev => ({
       ...prev,
-      [missionId]: value
+      [playerMissionId]: value
     }))
-    // Clear error when user starts typing
-    if (missionErrors[missionId]) {
-      setMissionErrors(prev => ({ ...prev, [missionId]: '' }))
+    if (missionErrors[playerMissionId]) {
+      setMissionErrors(prev => ({ ...prev, [playerMissionId]: '' }))
     }
   }
 
@@ -1444,81 +1255,77 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
     }
   }
 
-  const handleSubmitMission = async (missionId) => {
-    const successKey = successKeys[missionId]
-    if (!successKey) return
-
-    // Find the mission to determine its type
-    const mission = missions.find(m => m.id === missionId)
+  const handleSubmitMission = async (playerMissionId) => {
+    const mission = missions.find(m => m.playerMissionId === playerMissionId)
     if (!mission) {
-      setMissionErrors(prev => ({ ...prev, [missionId]: 'Mission not found' }))
+      setMissionErrors(prev => ({ ...prev, [playerMissionId]: 'Mission not found' }))
       return
     }
 
-    // Clear any existing error for this mission
-    setMissionErrors(prev => ({ ...prev, [missionId]: '' }))
-    setShowMissionSuccess(false) // Reset success state
+    setMissionErrors(prev => ({ ...prev, [playerMissionId]: '' }))
+    setShowMissionSuccess(false)
     setMissionIntel(null)
 
     try {
       let result
-      
-      // Route to appropriate completion function based on mission type
-      if (mission.type === 'passphrase') {
-        // Only receivers can complete passphrase missions
-        if (mission.role !== 'receiver') {
-          throw new Error('Only the receiver can complete this passphrase mission')
+
+      if (mission.completionType === 'phrase') {
+        const answer = successKeys[playerMissionId]
+        if (!answer) return
+        result = await neonApi.completePhaseMission(playerMissionId, answer, agentId)
+      } else if (mission.completionType === 'signoff') {
+        if (!signerUserId || !signerPassphrase) {
+          setMissionErrors(prev => ({ ...prev, [playerMissionId]: 'Select a signer and enter their passphrase' }))
+          return
         }
-        result = await neonApi.completePassphraseMission(missionId, successKey, agentId)
-      } else if (mission.type === 'object') {
-        // Object missions
-        result = await neonApi.completeObjectMission(missionId, successKey, agentId)
-      } else {
-        // Book missions
-        result = await neonApi.completeBookMission(missionId, successKey, agentId)
+        result = await neonApi.signOffMission(playerMissionId, parseInt(signerUserId), signerPassphrase)
       }
-      
-      // Mission completed (or failed) - mark as completed so they can't try again
-      setCompletedMissions(prev => new Set([...prev, missionId]))
+
+      setCompletedMissions(prev => new Set([...prev, playerMissionId]))
       setSuccessKeys(prev => {
         const newKeys = { ...prev }
-        delete newKeys[missionId]
+        delete newKeys[playerMissionId]
         return newKeys
       })
-      
-      // Store the intel if provided
+      setSignerUserId('')
+      setSignerPassphrase('')
+
       if (result.intel) {
         setMissionIntel(result.intel)
-        // Refresh intel tab data if it's already loaded
         if (users.length > 0) {
           fetchUsers()
         }
       }
-      
-      // Show success state only if answer was correct (or for non-passphrase missions)
-      // For passphrase missions with incorrect answer, was_correct will be false
-      if (selectedMissionId === missionId) {
-        if (mission.type === 'passphrase' && result.was_correct === false) {
-          // They were tricked - show failed state instead of input field
-          setShowMissionSuccess(false)
-          setShowMissionFailed(true)
-          setMissionFailedMessage(result.message || 'Mission failed. You\'ve been tricked! You fell for the false intel.')
-          setMissionErrors(prev => ({ ...prev, [missionId]: '' }))
-        } else {
-          // Correct answer or non-passphrase mission - show success
-          setShowMissionSuccess(true)
-          setShowMissionFailed(false)
-          setMissionErrors(prev => ({ ...prev, [missionId]: '' }))
-        }
+
+      if (result.bounty > 0) {
+        setCompletedBounty(result.bounty)
+      }
+
+      if (selectedMissionId === playerMissionId) {
+        setShowMissionSuccess(true)
+        setShowMissionFailed(false)
+        setMissionErrors(prev => ({ ...prev, [playerMissionId]: '' }))
       }
     } catch (error) {
       console.error('Error completing mission:', error)
-      setMissionErrors(prev => ({ ...prev, [missionId]: error.message || 'Failed to complete mission. Please try again.' }))
-      setShowMissionSuccess(false) // Ensure success state is not shown on error
+      setMissionErrors(prev => ({ ...prev, [playerMissionId]: error.message || 'Failed to complete mission. Please try again.' }))
+      setShowMissionSuccess(false)
       setMissionIntel(null)
     }
   }
 
+  const handleMarkBountyPaid = async (playerMissionId) => {
+    try {
+      await neonApi.markBountyPaid(playerMissionId)
+      setMissions(prev => prev.map(m =>
+        m.playerMissionId === playerMissionId ? { ...m, bountyPaid: true } : m
+      ))
+      setCompletedBounty(0)
+      closeMissionModal()
+    } catch (error) {
+      console.error('Error marking bounty paid:', error)
+    }
+  }
 
   if (loading) {
     return (
@@ -1724,82 +1531,74 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
               </div>
             ) : (
               <>
+                {[1, 2, 3].map(phase => {
+                  const phaseMissions = missions.filter(m => m.phase === phase)
+                  if (phaseMissions.length === 0) return null
+                  const isLocked = phase < currentPhase
+                  const isCurrent = phase === currentPhase
 
-                <div className="missions-grid">
-              {missions
-                .filter(mission => !completedMissions.has(mission.id))
-                .map((mission, index) => (
-                <div 
-                  key={mission.id} 
-                  className="mission-card clickable"
-                  onClick={() => openMissionModal(mission.id)}
-                >
-                  <div className="mission-header">
-                    <h3>
-                      {mission.type === 'passphrase' 
-                        ? mission.title 
-                        : mission.type === 'object'
-                        ? `Operation ${mission.title}`
-                        : `Book Operation: ${mission.title}`
-                      }
-                    </h3>
-                  </div>
-                  
-                    {mission.type === 'passphrase' ? (
-                      (() => {
-                        const lines = mission.mission_body.split('\n').filter(line => line.trim() !== '')
-                        const displayLines = lines.slice(0, 3)
-                        return (
-                          <div>
-                            <p className="mission-body-line">{displayLines[0] || ''}</p>
-                            {displayLines[1] && (
-                              <p className="mission-body-outline">
-                                {displayLines[1]}
-                              </p>
-                            )}
-                            {displayLines[2] && (
-                              <p className="mission-body-line">{displayLines[2]}</p>
-                            )}
-                          </div>
-                        )
-                      })()
-                    ) : (
-                      <p style={{ whiteSpace: 'pre-line' }}>{mission.mission_body}</p>
-                    )}
-              </div>
-              ))}
-            </div>
-            
-            {completedMissions.size > 0 && (
-              <div className="completed-missions">
-                <h3>Completed Missions</h3>
-                <ul>
-                  {missions
-                    .filter(mission => completedMissions.has(mission.id))
-                    .map((mission, index) => (
-                      <li 
-                        key={mission.id}
-                        onClick={() => openCompletedMissionModal(mission.id)}
-                        style={{ cursor: 'pointer', textDecoration: 'underline' }}
-                      >
-                        {mission.type === 'passphrase' 
-                          ? mission.title 
-                          : mission.type === 'object'
-                          ? mission.title
-                          : `Book Operation: ${mission.title}`
-                        }
-                      </li>
-                    ))}
-                </ul>
-              </div>
-            )}
+                  return (
+                    <div key={phase} style={{ marginBottom: '16px' }}>
+                      <div style={{ marginBottom: '8px', fontWeight: 'bold', opacity: isLocked ? 0.5 : 1 }}>
+                        Phase {phase} {isLocked ? '(Locked)' : isCurrent ? '(Current)' : ''}
+                      </div>
+
+                      <div className="missions-grid">
+                        {phaseMissions
+                          .filter(m => !completedMissions.has(m.playerMissionId))
+                          .map(mission => (
+                            <div
+                              key={mission.playerMissionId}
+                              className={`mission-card ${!isLocked ? 'clickable' : ''}`}
+                              onClick={() => !isLocked && openMissionModal(mission.playerMissionId)}
+                              style={{ opacity: isLocked ? 0.5 : 1, pointerEvents: isLocked ? 'none' : 'auto' }}
+                            >
+                              <div className="mission-header">
+                                <h3>{mission.title}</h3>
+                                {mission.bounty > 0 && (
+                                  <span style={{ fontSize: '0.75em', color: '#b8860b', fontWeight: 'bold' }}>{mission.bounty}pts</span>
+                                )}
+                              </div>
+                              <p style={{ whiteSpace: 'pre-line' }}>{mission.missionBody}</p>
+                            </div>
+                          ))}
+                      </div>
+
+                      {phaseMissions.some(m => completedMissions.has(m.playerMissionId)) && (
+                        <div className="completed-missions">
+                          <ul>
+                            {phaseMissions
+                              .filter(m => completedMissions.has(m.playerMissionId))
+                              .map(mission => (
+                                <li
+                                  key={mission.playerMissionId}
+                                  onClick={() => {
+                                    if (mission.completed && !mission.bountyPaid && mission.bounty > 0) {
+                                      openMissionModal(mission.playerMissionId)
+                                    } else {
+                                      openCompletedMissionModal(mission.playerMissionId)
+                                    }
+                                  }}
+                                  style={{ cursor: 'pointer', textDecoration: 'underline', position: 'relative', display: 'inline-block' }}
+                                >
+                                  {mission.title}
+                                  {mission.bountyPaid && mission.bounty > 0 && (
+                                    <span className="paid-stamp">PAID</span>
+                                  )}
+                                  {mission.completed && !mission.bountyPaid && mission.bounty > 0 && (
+                                    <span style={{ marginLeft: '6px', color: '#b8860b', fontWeight: 'bold', fontSize: '0.85em' }}>({mission.bounty}pts)</span>
+                                  )}
+                                </li>
+                              ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </>
             )}
-                <div className="reassignment-countdown-header">
-                  <span className="countdown-label">NEW MISSIONS IN:</span>
-                  <span className="countdown-time">{nextReassignmentCountdown}</span>
-                </div>
-              </div>
+          </div>
         )}
 
         {activeTab === 'intel' && (
@@ -2145,9 +1944,9 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
 
       {/* Mission Completion Modal */}
         {showMissionModal && selectedMissionId && (() => {
-          const mission = missions.find(m => m.id === selectedMissionId)
+          const mission = missions.find(m => m.playerMissionId === selectedMissionId)
           if (!mission) return null
-          
+
           return (
             <div className={`modal ${isMissionClosing ? 'closing' : ''}`}>
               {!showMissionSuccess && !showMissionFailed ? (
@@ -2159,24 +1958,12 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
                   </div>
 
                   <div className="modal-content">
-                    <h2>
-                      {mission.type === 'passphrase' 
-                        ? mission.title 
-                        : mission.type === 'object'
-                        ? `Operation ${mission.title}`
-                        : `Book Operation: ${mission.title}`
-                      }
-                    </h2>
-                    {mission.type !== 'passphrase' && (
-                      <p style={{ whiteSpace: 'pre-line' }}>{mission.mission_body}</p>
-                    )}
-                    
-                    {/* Only show input for book missions or passphrase receivers */}
-                    {(mission.type !== 'passphrase' || mission.role === 'receiver') && (
+                    <h2>{mission.title}</h2>
+                    <p style={{ whiteSpace: 'pre-line' }}>{mission.missionBody}</p>
+
+                    {mission.completionType === 'phrase' && (
                       <div className="field-group">
-                        <label htmlFor="mission-success-key">
-                          {mission.type === 'passphrase' ? 'Your Answer' : 'Success Key'}
-                        </label>
+                        <label htmlFor="mission-success-key">Your Answer</label>
                         <div className="input-with-clear">
                           <input
                             id="mission-success-key"
@@ -2188,20 +1975,72 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
                                 handleSubmitMission(selectedMissionId)
                               }
                             }}
-                            placeholder={mission.type === 'passphrase' 
-                              ? 'Enter the word you received...' 
-                              : 'Enter success key...'}
+                            placeholder="Enter your answer..."
                           />
                         </div>
                       </div>
                     )}
 
-                    {mission.type === 'passphrase' && mission.role !== 'receiver' && (
-                      <div className="field-group">
-                        <p className="info-text">
-                          You are a SENDER for this mission. You'll get credit for completing this mission if the receiver enters your intel.
-                        </p>
-                      </div>
+                    {mission.completionType === 'signoff' && (
+                      <>
+                        {mission.signoffPromptTemplate && (
+                          <div style={{ padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '4px', marginBottom: '12px', fontStyle: 'italic' }}>
+                            {mission.signoffPromptTemplate
+                              .replace(/\{player_name\}/g, `${firstName} ${lastName}`)
+                              .replace(/\{variable\}/g, mission.variableValue || '')
+                              .replace(/\{signer_name\}/g, '________')}
+                          </div>
+                        )}
+
+                        {mission.signerConstraint === 'new_signer' && (
+                          <p style={{ fontSize: '0.85em', color: '#888', marginBottom: '8px' }}>
+                            Must be someone who hasn't signed off on any of your other missions.
+                          </p>
+                        )}
+                        {mission.signerConstraint === 'same_signer' && (
+                          <p style={{ fontSize: '0.85em', color: '#888', marginBottom: '8px' }}>
+                            Must be the same person who signed off on your earlier mission.
+                          </p>
+                        )}
+                        {mission.signerConstraint === 'admin_only' && (
+                          <p style={{ fontSize: '0.85em', color: '#888', marginBottom: '8px' }}>
+                            Must be signed off by a host.
+                          </p>
+                        )}
+
+                        <div className="field-group">
+                          <label htmlFor="signer-select">Who is signing off?</label>
+                          <select
+                            id="signer-select"
+                            value={signerUserId}
+                            onChange={(e) => setSignerUserId(e.target.value)}
+                            style={{ width: '100%', padding: '8px', fontSize: '1em' }}
+                          >
+                            <option value="">-- Select a player --</option>
+                            {sessionParticipants.map(p => (
+                              <option key={p.id} value={p.id}>{p.firstname} {p.lastname}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="field-group">
+                          <label htmlFor="signer-passphrase">Their passphrase</label>
+                          <div className="input-with-clear">
+                            <input
+                              id="signer-passphrase"
+                              type="password"
+                              value={signerPassphrase}
+                              onChange={(e) => setSignerPassphrase(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && signerUserId && signerPassphrase) {
+                                  handleSubmitMission(selectedMissionId)
+                                }
+                              }}
+                              placeholder="Enter their passphrase..."
+                            />
+                          </div>
+                        </div>
+                      </>
                     )}
 
                     {missionErrors[selectedMissionId] && (
@@ -2212,36 +2051,28 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
                   </div>
 
                   <div className="modal-footer">
-                    {(mission.type !== 'passphrase' || mission.role === 'receiver') && (
-                      <button 
-                        onClick={() => handleSubmitMission(selectedMissionId)}
-                        disabled={!successKeys[selectedMissionId]}
-                        className="save-button"
-                      >
-                        Submit
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleSubmitMission(selectedMissionId)}
+                      disabled={
+                        mission.completionType === 'phrase'
+                          ? !successKeys[selectedMissionId]
+                          : !signerUserId || !signerPassphrase
+                      }
+                      className="save-button"
+                    >
+                      {mission.completionType === 'signoff' ? 'Confirm Sign-off' : 'Submit'}
+                    </button>
                   </div>
                 </>
               ) : showMissionFailed ? (
                 <>
                   <div className="modal-header">
-                    <button onClick={closeMissionModal} className="close-button">
-                      Close
-                    </button>
+                    <button onClick={closeMissionModal} className="close-button">Close</button>
                   </div>
-
                   <div className="modal-content">
                     <div className="mission-failed">
                       <p className="mission-failed-title">MISSION FAILED</p>
-                      <h2>
-                        {mission.type === 'passphrase' 
-                          ? mission.title 
-                          : mission.type === 'object'
-                          ? mission.title
-                          : `Book Operation: ${mission.title}`
-                        }
-                      </h2>
+                      <h2>{mission.title}</h2>
                       {missionFailedMessage && (
                         <p className="mission-failed-message">
                           {missionFailedMessage.replace(/^Mission failed\.\s*/i, '')}
@@ -2253,27 +2084,27 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
               ) : (
                 <>
                   <div className="modal-header">
-                    <button onClick={closeMissionModal} className="close-button">
-                      Close
-                    </button>
+                    <button onClick={closeMissionModal} className="close-button">Close</button>
                   </div>
-
                   <div className="modal-content">
                     <div className="mission-success">
                       <p>Mission success</p>
-                      <h2>
-                        {mission.type === 'passphrase' 
-                          ? mission.title 
-                          : mission.type === 'object'
-                          ? mission.title
-                          : `Book Operation: ${mission.title}`
-                        }
-                      </h2>
+                      <h2>{mission.title}</h2>
+                      {completedBounty > 0 && (
+                        <div className="bounty-award">
+                          <p className="bounty-award-text">BONUS AWARDED: {completedBounty} pts</p>
+                          <button
+                            className="bounty-paid-button"
+                            onClick={() => handleMarkBountyPaid(mission.playerMissionId)}
+                          >
+                            PAID
+                          </button>
+                        </div>
+                      )}
                       {missionIntel && (
                         <div className="success-intel">
                           <h3>{Array.isArray(missionIntel) ? 'Your Intel:' : 'New intel:'}</h3>
                           {Array.isArray(missionIntel) ? (
-                            // Display all intel
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                               {missionIntel.map((intel, idx) => (
                                 <div key={idx}>
@@ -2298,7 +2129,6 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
                               ))}
                             </div>
                           ) : (
-                            // Display single intel (from new mission completion)
                             <>
                               {missionIntel.intel_type === 'team' ? (
                                 <p>

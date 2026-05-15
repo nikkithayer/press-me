@@ -934,6 +934,58 @@
   color: var(--black);
 }
 
+.bounty-award {
+  margin: var(--unit-base) 0;
+  padding: var(--unit-sm);
+  border: 3px solid #b8860b;
+  border-radius: var(--unit-xs);
+  background-color: #fffbea;
+}
+
+.bounty-award-text {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.8em !important;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #b8860b !important;
+  letter-spacing: 2px;
+  margin: 0 0 var(--unit-sm) 0 !important;
+}
+
+.bounty-paid-button {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.4em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  padding: var(--unit-sm) var(--unit-lg);
+  background-color: #b8860b;
+  color: white;
+  border: 3px solid #8b6508;
+  border-radius: var(--unit-xs);
+  cursor: pointer;
+}
+
+.bounty-paid-button:hover {
+  background-color: #8b6508;
+}
+
+.paid-stamp {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.75em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #b8860b;
+  border: 2px solid #b8860b;
+  border-radius: 3px;
+  transform: rotate(-5deg);
+  text-decoration: none !important;
+}
+
 .modal .close-button{
   padding: var(--unit-xs) var(--unit-sm);
   color: var(--black);

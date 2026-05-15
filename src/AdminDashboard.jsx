@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { neonApi } from './neonApi'
 import { isAdmin } from './utils/admin.js'
@@ -96,22 +96,37 @@ function AdminDashboard({ currentUser, onLogout }) {
   const [allUsers, setAllUsers] = useState([])
   const [selectedUsers, setSelectedUsers] = useState(new Set())
   const [sessionName, setSessionName] = useState('')
-  const [refreshIntervalMinutes, setRefreshIntervalMinutes] = useState(15)
   const [creatingSession, setCreatingSession] = useState(false)
   const [editingSession, setEditingSession] = useState(false)
   const [editingSessionId, setEditingSessionId] = useState(null)
-  const [refreshingMissions, setRefreshingMissions] = useState(false)
   const [sessionUsers, setSessionUsers] = useState([])
-  const [userMissions, setUserMissions] = useState({}) // { userId: [missions] }
+  const [playerMissions, setPlayerMissions] = useState([]) // flat list from getAllPlayerMissionsForSession
   const [loadingSessionData, setLoadingSessionData] = useState(false)
-  const [completingMission, setCompletingMission] = useState(null) // { missionId, userId, missionType }
+  const [completingMission, setCompletingMission] = useState(null) // { playerMissionId, userId }
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false)
-  const [nextReassignmentCountdown, setNextReassignmentCountdown] = useState('Calculating...')
-  
-  // Track reassignment state (persists across re-renders)
-  const lastSeenTimestampRef = useRef(null)
-  const hasReassignedForThisTimestampRef = useRef(false)
-  
+  const [advancingPhase, setAdvancingPhase] = useState(false)
+
+  // Global mission manager state
+  const [showMissionManager, setShowMissionManager] = useState(false)
+  const [showMissionModal, setShowMissionModal] = useState(false)
+  const [editingMission, setEditingMission] = useState(null)
+  const [missionForm, setMissionForm] = useState({
+    phase: 1,
+    title: '',
+    missionBody: '',
+    completionType: 'phrase',
+    successKey: '',
+    signoffPromptTemplate: '',
+    variablePool: '',
+    variableSource: 'pool',
+    signerConstraint: 'any',
+    sameSigerMissionId: null,
+    sortOrder: 0,
+    bounty: 0
+  })
+  const [phaseMissions, setPhaseMissions] = useState([])
+  const [loadingPhaseMissions, setLoadingPhaseMissions] = useState(false)
+
   // Check if user is admin
   const userIsAdmin = isAdmin(currentUser)
 
@@ -124,199 +139,6 @@ function AdminDashboard({ currentUser, onLogout }) {
     loadSessions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userIsAdmin, navigate])
-
-  // Automatic mission reassignment based on session interval
-  useEffect(() => {
-    // Only run if there's an active session
-    if (!activeSession || activeSession.status !== 'active') {
-      return
-    }
-
-    // Prevent reassignment if already in progress or loading session data
-    if (refreshingMissions || loadingSessionData) {
-      return
-    }
-
-    const checkAndReassign = async () => {
-      try {
-        const lastAssigned = await neonApi.getLastAssignmentTimestamp()
-        
-        if (!lastAssigned) {
-          // No previous assignment, skip automatic reassignment
-          lastSeenTimestampRef.current = null
-          hasReassignedForThisTimestampRef.current = false
-          return
-        }
-
-        // Check if this is a new timestamp (meaning a reassignment happened externally)
-        const currentTimestamp = lastAssigned.getTime ? lastAssigned.getTime() : new Date(lastAssigned).getTime()
-        
-        if (lastSeenTimestampRef.current !== currentTimestamp) {
-          // Timestamp changed - reset the flag so we can reassign for this new timestamp
-          console.log(`[AdminDashboard] Timestamp changed: ${lastSeenTimestampRef.current} -> ${currentTimestamp}`)
-          lastSeenTimestampRef.current = currentTimestamp
-          hasReassignedForThisTimestampRef.current = false
-        }
-
-        // If we've already reassigned for this timestamp, don't reassign again
-        if (hasReassignedForThisTimestampRef.current) {
-          return
-        }
-
-        const now = Date.now()
-        const lastAssignedDate = new Date(lastAssigned)
-        
-        // Calculate difference - handle timezone issues
-        let diffMs = now - lastAssignedDate.getTime()
-        let diffMinutes = diffMs / (1000 * 60)
-        
-        // Handle timezone offset (same logic as Dashboard countdown)
-        if (diffMs < 0 && Math.abs(diffMinutes) > 400 && Math.abs(diffMinutes) < 500) {
-          const timezoneOffsetMinutes = 480 // PST is UTC-8
-          const actualElapsedMs = diffMs + (timezoneOffsetMinutes * 60 * 1000)
-          diffMinutes = actualElapsedMs / (1000 * 60)
-        } else if (diffMinutes < 0) {
-          diffMinutes = Math.abs(diffMinutes)
-        }
-        
-        // Get the refresh interval from the active session
-        const reassignmentIntervalMinutes = activeSession?.mission_refresh_interval_minutes || 15
-        const elapsedMinutes = diffMinutes
-        
-        // Debug logging
-        if (elapsedMinutes >= reassignmentIntervalMinutes * 0.9) {
-          console.log(`[AdminDashboard] Check: ${elapsedMinutes.toFixed(2)} minutes elapsed, interval: ${reassignmentIntervalMinutes} minutes, needs reassignment: ${elapsedMinutes >= reassignmentIntervalMinutes}`)
-        }
-        
-        // Only reassign if elapsed time >= interval AND we haven't already reassigned for this timestamp
-        if (elapsedMinutes >= reassignmentIntervalMinutes && !hasReassignedForThisTimestampRef.current) {
-          console.log(`[AdminDashboard] Auto-reassigning missions: ${elapsedMinutes.toFixed(1)} minutes elapsed (interval: ${reassignmentIntervalMinutes} minutes)`)
-          
-          // Mark that we've reassigned for this timestamp (optimistically)
-          // If another admin succeeds first, the timestamp will change and we'll reset on next check
-          hasReassignedForThisTimestampRef.current = true
-          
-          setRefreshingMissions(true)
-          try {
-            const result = await neonApi.resetAndAssignAllMissions()
-            
-            // If lock acquisition failed, another admin is handling it
-            // This is fine - they'll update the timestamp and we'll see it on the next check
-            if (!result.success && result.reason?.includes('lock')) {
-              console.log('[AdminDashboard] Another admin acquired lock first, skipping reassignment')
-              // Reset flag - when timestamp updates, we'll reset properly on next check
-              hasReassignedForThisTimestampRef.current = false
-              return
-            }
-            
-            if (!result.success) {
-              console.error('[AdminDashboard] Reassignment failed:', result.reason)
-              hasReassignedForThisTimestampRef.current = false
-              return
-            }
-            
-            // Reload sessions (which will reload active session data) instead of calling loadActiveSessionData directly
-            // This prevents infinite loops by using the same update path as manual actions
-            await loadSessions()
-            console.log(`[AdminDashboard] Auto-reassignment completed successfully: ${result.missionsAssigned} missions assigned`)
-          } catch (error) {
-            console.error('[AdminDashboard] Error during auto-reassignment:', error)
-            // Reset flag on error so we can retry
-            hasReassignedForThisTimestampRef.current = false
-            // Don't show alert for automatic reassignment failures
-          } finally {
-            setRefreshingMissions(false)
-          }
-        }
-      } catch (error) {
-        console.error('[AdminDashboard] Error checking for auto-reassignment:', error)
-      }
-    }
-
-    // Don't check immediately - wait a bit to avoid checking right after session start
-    // Check after 10 seconds, then every 5 seconds
-    let intervalId = null
-    const initialTimeout = setTimeout(() => {
-      checkAndReassign()
-      intervalId = setInterval(checkAndReassign, 5000) // Check every 5 seconds
-    }, 10000)
-
-    return () => {
-      clearTimeout(initialTimeout)
-      if (intervalId) {
-        clearInterval(intervalId)
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSession?.id, refreshingMissions, loadingSessionData]) // Only depend on session ID, not entire object
-
-  // Countdown timer for next mission reassignment
-  useEffect(() => {
-    if (!activeSession || activeSession.status !== 'active') {
-      setNextReassignmentCountdown('No active session')
-      return
-    }
-
-    const updateCountdown = async () => {
-      try {
-        const lastAssigned = await neonApi.getLastAssignmentTimestamp()
-        
-        if (!lastAssigned) {
-          setNextReassignmentCountdown('Unknown')
-          return
-        }
-        
-        const now = new Date()
-        const lastAssignedDate = new Date(lastAssigned)
-        
-        // Calculate difference - handle timezone issues
-        let diffMs = now.getTime() - lastAssignedDate.getTime()
-        let diffMinutes = diffMs / (1000 * 60)
-        
-        // Handle timezone offset (same logic as auto-reassignment)
-        if (diffMs < 0 && Math.abs(diffMinutes) > 400 && Math.abs(diffMinutes) < 500) {
-          const timezoneOffsetMinutes = 480 // PST is UTC-8
-          const actualElapsedMs = diffMs + (timezoneOffsetMinutes * 60 * 1000)
-          diffMinutes = actualElapsedMs / (1000 * 60)
-        } else if (diffMinutes < 0) {
-          diffMinutes = Math.abs(diffMinutes)
-        }
-        
-        const reassignmentIntervalMinutes = activeSession?.mission_refresh_interval_minutes || 15
-        const elapsedMinutes = diffMinutes
-        const remainingMinutes = Math.max(0, reassignmentIntervalMinutes - elapsedMinutes)
-        
-        if (remainingMinutes <= 0) {
-          setNextReassignmentCountdown('Ready to reassign')
-        } else {
-          const totalSeconds = Math.floor(remainingMinutes * 60)
-          const minutes = Math.floor(totalSeconds / 60)
-          const seconds = totalSeconds % 60
-          
-          if (minutes > 0) {
-            setNextReassignmentCountdown(`${minutes}m ${seconds}s`)
-          } else {
-            setNextReassignmentCountdown(`${seconds}s`)
-          }
-        }
-      } catch (error) {
-        console.error('Error calculating countdown:', error)
-        setNextReassignmentCountdown('Error calculating')
-      }
-    }
-    
-    // Update immediately
-    updateCountdown()
-    
-    // Update every second
-    const interval = setInterval(() => {
-      updateCountdown()
-    }, 1000)
-    
-    return () => {
-      clearInterval(interval)
-    }
-  }, [activeSession])
 
   const loadSessions = async () => {
     try {
@@ -332,7 +154,7 @@ function AdminDashboard({ currentUser, onLogout }) {
         loadActiveSessionData(active)
       } else {
         setSessionUsers([])
-        setUserMissions({})
+        setPlayerMissions([])
       }
       
       setLoading(false)
@@ -346,60 +168,24 @@ function AdminDashboard({ currentUser, onLogout }) {
   const loadActiveSessionData = async (session) => {
     if (!session || !session.participant_user_ids || session.participant_user_ids.length === 0) {
       setSessionUsers([])
-      setUserMissions({})
+      setPlayerMissions([])
       return
     }
 
     try {
       setLoadingSessionData(true)
-      
-      // Get all users
-      const allUsers = await neonApi.getUsers()
-      
-      // Filter to only session participants
+
+      const allUsersResult = await neonApi.getUsers()
       const sessionUserIds = new Set(session.participant_user_ids.map(id => Number(id)))
-      const usersInSession = allUsers.filter(user => sessionUserIds.has(user.id))
+      const usersInSession = allUsersResult.filter(user => sessionUserIds.has(user.id))
       setSessionUsers(usersInSession)
-      
-      // Fetch missions for each user
-      // Note: We need to fetch missions directly since getAllMissionsForAgent checks if user is in session
-      // Admin might not be in the participant list, so we'll fetch missions directly
-      const missionsMap = {}
-      for (const user of usersInSession) {
-        try {
-          // Try getAllMissionsForAgent first (works if the user is in session)
-          // If that fails or returns empty, fetch missions directly from the database
-          let missions = []
-          try {
-            missions = await neonApi.getAllMissionsForAgent(user.id)
-          } catch (err) {
-            // If that fails, fetch missions directly
-            console.log(`Getting missions directly for user ${user.id}`)
-          }
-          
-          // If we didn't get missions, fetch them directly
-          if (!missions || missions.length === 0) {
-            // Get missions directly from database for this user
-            const bookMissions = await neonApi.getBookMissionsForAgent(user.id)
-            const passphraseMissions = await neonApi.getPassphraseMissionsForAgent(user.id)
-            const objectMissions = await neonApi.getObjectMissionsForAgent(user.id)
-            
-            const bookWithType = (bookMissions || []).map(m => ({ ...m, type: 'book' }))
-            missions = [...bookWithType, ...(passphraseMissions || []), ...(objectMissions || [])]
-          }
-          
-          missionsMap[user.id] = missions || []
-        } catch (error) {
-          console.error(`Error fetching missions for user ${user.id}:`, error)
-          missionsMap[user.id] = []
-        }
-      }
-      
-      setUserMissions(missionsMap)
+
+      const missions = await neonApi.getAllPlayerMissionsForSession(session.id)
+      setPlayerMissions(missions || [])
     } catch (error) {
       console.error('Error loading active session data:', error)
       setSessionUsers([])
-      setUserMissions({})
+      setPlayerMissions([])
     } finally {
       setLoadingSessionData(false)
     }
@@ -495,7 +281,6 @@ function AdminDashboard({ currentUser, onLogout }) {
       setAllUsers(users.filter(user => user.ishere)) // Only show active users
       setSelectedUsers(new Set())
       setSessionName('')
-      setRefreshIntervalMinutes(15)
       setShowCreateModal(true)
     } catch (error) {
       console.error('Error fetching users:', error)
@@ -536,15 +321,12 @@ function AdminDashboard({ currentUser, onLogout }) {
       await neonApi.createSession({
         name: sessionName.trim(),
         userIds: Array.from(selectedUsers),
-        createdBy: currentUser?.id,
-        refreshIntervalMinutes: refreshIntervalMinutes
+        createdBy: currentUser?.id
       })
-      
-      // Close modal and refresh sessions
+
       setShowCreateModal(false)
       setSessionName('')
       setSelectedUsers(new Set())
-      setRefreshIntervalMinutes(15)
       loadSessions()
       alert('Session created successfully! Start the session to assign missions.')
     } catch (error) {
@@ -571,7 +353,6 @@ function AdminDashboard({ currentUser, onLogout }) {
       setEditingSessionId(session.id)
       setSessionName(session.name || '')
       setSelectedUsers(new Set(session.participant_user_ids || []))
-      setRefreshIntervalMinutes(session.mission_refresh_interval_minutes || 15)
       setShowEditModal(true)
     } catch (error) {
       console.error('Error fetching users:', error)
@@ -593,16 +374,13 @@ function AdminDashboard({ currentUser, onLogout }) {
     try {
       await neonApi.updateSession(editingSessionId, {
         name: sessionName.trim(),
-        userIds: Array.from(selectedUsers),
-        refreshIntervalMinutes: refreshIntervalMinutes
+        userIds: Array.from(selectedUsers)
       })
-      
-      // Close modal and refresh sessions
+
       setShowEditModal(false)
       setEditingSessionId(null)
       setSessionName('')
       setSelectedUsers(new Set())
-      setRefreshIntervalMinutes(15)
       loadSessions()
       alert('Session updated successfully!')
     } catch (error) {
@@ -614,31 +392,17 @@ function AdminDashboard({ currentUser, onLogout }) {
   }
 
 
-  const handleRequestCompleteMission = (mission, userId) => {
-    setCompletingMission({ missionId: mission.id, userId, missionType: mission.type || 'unknown' })
+  const handleRequestCompleteMission = (playerMissionId, userId) => {
+    setCompletingMission({ playerMissionId, userId })
     setShowCompleteConfirm(true)
   }
 
   const handleConfirmCompleteMission = async () => {
     if (!completingMission) return
 
-    const { missionId, userId, missionType } = completingMission
-
     try {
-      let result
-      
-      if (missionType === 'book') {
-        result = await neonApi.adminCompleteBookMission(missionId, userId)
-      } else if (missionType === 'passphrase') {
-        result = await neonApi.adminCompletePassphraseMission(missionId, userId)
-      } else if (missionType === 'object') {
-        result = await neonApi.adminCompleteObjectMission(missionId, userId)
-      } else {
-        alert('Unknown mission type')
-        return
-      }
+      const result = await neonApi.adminCompletePhaseMission(completingMission.playerMissionId)
 
-      // Reload the active session data to show updated missions
       if (activeSession) {
         await loadActiveSessionData(activeSession)
       }
@@ -655,6 +419,130 @@ function AdminDashboard({ currentUser, onLogout }) {
   const handleCancelCompleteMission = () => {
     setShowCompleteConfirm(false)
     setCompletingMission(null)
+  }
+
+  const handleAdvancePhase = async () => {
+    if (!activeSession) return
+    const currentPhase = activeSession.current_phase || 0
+    if (currentPhase >= 3) return
+
+    if (!window.confirm(`Advance to Phase ${currentPhase + 1}? This will lock Phase ${currentPhase} missions.`)) {
+      return
+    }
+
+    setAdvancingPhase(true)
+    try {
+      await neonApi.advancePhase(activeSession.id)
+      await loadSessions()
+      alert(`Advanced to Phase ${currentPhase + 1}!`)
+    } catch (error) {
+      alert(`Error advancing phase: ${error.message || 'Please try again.'}`)
+    } finally {
+      setAdvancingPhase(false)
+    }
+  }
+
+  // Global mission manager handlers
+  const loadPhaseMissions = async () => {
+    try {
+      setLoadingPhaseMissions(true)
+      const missions = await neonApi.getPhaseMissions()
+      setPhaseMissions(missions || [])
+    } catch (error) {
+      console.error('Error loading phase missions:', error)
+      setPhaseMissions([])
+    } finally {
+      setLoadingPhaseMissions(false)
+    }
+  }
+
+  const handleOpenMissionManager = () => {
+    setShowMissionManager(true)
+    loadPhaseMissions()
+  }
+
+  const handleOpenMissionModal = (mission = null) => {
+    setEditingMission(mission)
+    if (mission) {
+      setMissionForm({
+        phase: mission.phase,
+        title: mission.title,
+        missionBody: mission.mission_body,
+        completionType: mission.completion_type,
+        successKey: mission.success_key || '',
+        signoffPromptTemplate: mission.signoff_prompt_template || '',
+        variablePool: mission.variable_pool ? mission.variable_pool.join(', ') : '',
+        variableSource: mission.variable_source || 'pool',
+        signerConstraint: mission.signer_constraint || 'any',
+        sameSigerMissionId: mission.same_signer_mission_id || null,
+        sortOrder: mission.sort_order || 0,
+        bounty: mission.bounty || 0
+      })
+    } else {
+      setMissionForm({
+        phase: 1,
+        title: '',
+        missionBody: '',
+        completionType: 'phrase',
+        successKey: '',
+        signoffPromptTemplate: '',
+        variablePool: '',
+        variableSource: 'pool',
+        signerConstraint: 'any',
+        sameSigerMissionId: null,
+        sortOrder: 0,
+        bounty: 0
+      })
+    }
+    setShowMissionModal(true)
+  }
+
+  const handleSaveMission = async () => {
+    if (!missionForm.title.trim() || !missionForm.missionBody.trim()) {
+      alert('Title and mission body are required')
+      return
+    }
+
+    const poolArray = missionForm.variablePool
+      ? missionForm.variablePool.split(',').map(v => v.trim()).filter(Boolean)
+      : null
+
+    const data = {
+      phase: missionForm.phase,
+      title: missionForm.title.trim(),
+      missionBody: missionForm.missionBody.trim(),
+      completionType: missionForm.completionType,
+      successKey: missionForm.completionType === 'phrase' ? missionForm.successKey : null,
+      signoffPromptTemplate: missionForm.completionType === 'signoff' ? missionForm.signoffPromptTemplate : null,
+      variablePool: poolArray && poolArray.length > 0 ? poolArray : null,
+      variableSource: missionForm.variableSource,
+      signerConstraint: missionForm.completionType === 'signoff' ? missionForm.signerConstraint : null,
+      sameSigerMissionId: missionForm.signerConstraint === 'same_signer' ? missionForm.sameSigerMissionId : null,
+      sortOrder: missionForm.sortOrder,
+      bounty: parseInt(missionForm.bounty) || 0
+    }
+
+    try {
+      if (editingMission) {
+        await neonApi.updatePhaseMission(editingMission.id, data)
+      } else {
+        await neonApi.createPhaseMission(data)
+      }
+      setShowMissionModal(false)
+      await loadPhaseMissions()
+    } catch (error) {
+      alert(`Error saving mission: ${error.message}`)
+    }
+  }
+
+  const handleDeleteMission = async (missionId) => {
+    if (!window.confirm('Delete this mission?')) return
+    try {
+      await neonApi.deletePhaseMission(missionId)
+      await loadPhaseMissions()
+    } catch (error) {
+      alert(`Error deleting mission: ${error.message}`)
+    }
   }
 
   if (!userIsAdmin) {
@@ -682,29 +570,9 @@ function AdminDashboard({ currentUser, onLogout }) {
             <button onClick={handleOpenCreateModal} className="button-primary">
               Create New Session
             </button>
-            <button className="button-secondary">
-              Load Existing Session
+            <button onClick={handleOpenMissionManager} className="button-secondary">
+              Manage Missions
             </button>
-            {activeSession && activeSession.status === 'active' && (
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px',
-                padding: '8px 16px',
-                backgroundColor: '#f5f5f5',
-                borderRadius: '4px',
-                border: '1px solid #ddd'
-              }}>
-                <span style={{ fontWeight: 'bold', color: '#666' }}>Next reassignment:</span>
-                <span style={{ 
-                  fontWeight: 'bold', 
-                  color: nextReassignmentCountdown === 'Ready to reassign' ? '#d32f2f' : '#333',
-                  fontSize: '1.1em'
-                }}>
-                  {nextReassignmentCountdown}
-                </span>
-              </div>
-            )}
           </div>
 
           {loading ? (
@@ -752,6 +620,15 @@ function AdminDashboard({ currentUser, onLogout }) {
                           )}
                           {session.status === 'active' && (
                             <>
+                              {(session.current_phase || 0) < 3 && (
+                                <button
+                                  onClick={() => handleAdvancePhase()}
+                                  className="button-primary"
+                                  disabled={advancingPhase}
+                                >
+                                  {advancingPhase ? 'Advancing...' : `Advance to Phase ${(session.current_phase || 0) + 1}`}
+                                </button>
+                              )}
                               <button onClick={() => session.voting_open ? handleCloseVoting(session.id) : handleOpenVoting(session.id)} className="button-secondary">
                                 {session.voting_open ? 'Close Voting' : 'Open Voting'}
                               </button>
@@ -802,8 +679,8 @@ function AdminDashboard({ currentUser, onLogout }) {
         {activeSession && (
           <div className="admin-section">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--unit-base)' }}>
-              <h2>Active Session: {activeSession.name}</h2>
-              <button 
+              <h2>Active Session: {activeSession.name} — Phase {activeSession.current_phase || 0} of 3</h2>
+              <button
                 onClick={() => loadActiveSessionData(activeSession)}
                 className="button-secondary"
                 disabled={loadingSessionData}
@@ -823,246 +700,96 @@ function AdminDashboard({ currentUser, onLogout }) {
             ) : (
               <div className="session-users-view">
                 <h3>Session Participants and Missions</h3>
-                <div className="users-missions-table">
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 'var(--unit-base)' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '2px solid var(--color-black)' }}>
-                        <th style={{ textAlign: 'left', padding: 'var(--unit-base)', borderBottom: '2px solid var(--color-black)' }}>User</th>
-                        <th style={{ textAlign: 'left', padding: 'var(--unit-base)', borderBottom: '2px solid var(--color-black)' }}>Alias</th>
-                        <th style={{ textAlign: 'left', padding: 'var(--unit-base)', borderBottom: '2px solid var(--color-black)' }}>Team</th>
-                        <th style={{ textAlign: 'left', padding: 'var(--unit-base)', borderBottom: '2px solid var(--color-black)' }}>Missions</th>
-                        <th style={{ textAlign: 'left', padding: 'var(--unit-base)', borderBottom: '2px solid var(--color-black)' }}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sessionUsers.map(user => {
-                        const missions = userMissions[user.id] || []
-                        return (
-                          <tr key={user.id} style={{ borderBottom: '1px solid #ddd' }}>
-                            <td style={{ padding: 'var(--unit-base)' }}>
-                              {user.firstname} {user.lastname}
-                            </td>
-                            <td style={{ padding: 'var(--unit-base)' }}>
-                              {user.alias_1} {user.alias_2}
-                            </td>
-                            <td style={{ padding: 'var(--unit-base)' }}>
-                              <span className={`user-team team-${user.team}`} style={{ textTransform: 'capitalize' }}>
-                                {user.team}
-                              </span>
-                            </td>
-                            <td style={{ padding: 'var(--unit-base)' }}>
-                              {missions.length === 0 ? (
-                                <span style={{ fontStyle: 'italic', color: '#888' }}>No missions</span>
-                              ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                  {missions.map((mission, idx) => {
-                                    const missionType = mission.type || 'unknown'
-                                    
-                                    // Special handling for book missions
-                                    if (missionType === 'book') {
-                                      const bookTitle = mission.book || 'Unknown Book'
-                                      const clueText = user.team === 'red' 
-                                        ? (mission.clue_red || mission.mission_body || 'No clue')
-                                        : (mission.clue_blue || mission.mission_body || 'No clue')
-                                      
-                                      return (
-                                        <div 
-                                          key={`${user.id}-${mission.id}-${idx}-book`} 
-                                          style={{ 
-                                            fontSize: '0.9em',
-                                            padding: '8px',
-                                            backgroundColor: mission.completed ? '#f0f8f0' : '#f9f9f9',
-                                            borderRadius: '4px',
-                                            border: mission.completed ? '1px solid #90ee90' : '1px solid #ddd'
-                                          }}
-                                        >
-                                          <div style={{ fontWeight: 'bold', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            📖 Book Mission
-                                            {mission.completed && (
-                                              <span style={{ color: 'green', marginLeft: '8px', fontSize: '0.85em' }}>✓ Completed</span>
-                                            )}
-                                          </div>
-                                          <div style={{ marginBottom: '4px', fontSize: '0.9em' }}>
-                                            <strong>Book:</strong> {bookTitle}
-                                          </div>
-                                          <div style={{ fontSize: '0.85em', color: '#666' }}>
-                                            <strong>Clue:</strong> {clueText && clueText.length > 100 
-                                              ? clueText.substring(0, 100) + '...'
-                                              : clueText
-                                            }
-                                          </div>
-                                          {!mission.completed && (
-                                            <button
-                                              onClick={() => handleRequestCompleteMission(mission, user.id)}
-                                              style={{
-                                                marginTop: '6px',
-                                                padding: '4px 8px',
-                                                fontSize: '0.85em',
-                                                cursor: 'pointer',
-                                                backgroundColor: '#4CAF50',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: '4px'
-                                              }}
-                                            >
-                                              Complete Mission
-                                            </button>
-                                          )}
-                                        </div>
-                                      )
-                                    }
-                                    
-                                    // Special handling for passphrase missions
-                                    if (missionType === 'passphrase') {
-                                      const isReceiver = mission.assigned_receiver === user.id
-                                      const isSender1 = mission.assigned_sender_1 === user.id
-                                      const isSender2 = mission.assigned_sender_2 === user.id
-                                      const isSender = isSender1 || isSender2
-                                      
-                                      let passphraseDisplay = ''
-                                      let roleDisplay = ''
-                                      
-                                      if (isReceiver) {
-                                        roleDisplay = 'Receiver'
-                                        // Show template with [correct/incorrect] format
-                                        const template = mission.passphrase_template || 'Unknown passphrase'
-                                        const correct = mission.correct_answer || ''
-                                        const incorrect = mission.incorrect_answer || ''
-                                        passphraseDisplay = template.replace('___', `[${correct}/${incorrect}]`)
-                                      } else if (isSender) {
-                                        roleDisplay = 'Sender'
-                                        // Show full passphrase with the word they're trying to pass
-                                        const template = mission.passphrase_template || 'Unknown passphrase'
-                                        const wordToPass = isSender1 
-                                          ? (mission.correct_answer || '')
-                                          : (mission.incorrect_answer || '')
-                                        passphraseDisplay = template.replace('___', wordToPass)
-                                      }
-                                      
-                                      return (
-                                        <div 
-                                          key={`${user.id}-${mission.id}-${idx}-passphrase`} 
-                                          style={{ 
-                                            fontSize: '0.9em',
-                                            padding: '8px',
-                                            backgroundColor: mission.completed ? '#f0f8f0' : '#f9f9f9',
-                                            borderRadius: '4px',
-                                            border: mission.completed ? '1px solid #90ee90' : '1px solid #ddd'
-                                          }}
-                                        >
-                                          <div style={{ fontWeight: 'bold', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            💬 Passphrase Mission
-                                            {mission.completed && (
-                                              <span style={{ color: 'green', marginLeft: '8px', fontSize: '0.85em' }}>✓ Completed</span>
-                                            )}
-                                          </div>
-                                          <div style={{ marginBottom: '4px', fontSize: '0.9em' }}>
-                                            <strong>Role:</strong> {roleDisplay}
-                                          </div>
-                                          <div style={{ fontSize: '0.85em', color: '#666' }}>
-                                            <strong>Passphrase:</strong> {passphraseDisplay && passphraseDisplay.length > 100 
-                                              ? passphraseDisplay.substring(0, 100) + '...'
-                                              : passphraseDisplay
-                                            }
-                                          </div>
-                                          {!mission.completed && (
-                                            <button
-                                              onClick={() => handleRequestCompleteMission(mission, user.id)}
-                                              style={{
-                                                marginTop: '6px',
-                                                padding: '4px 8px',
-                                                fontSize: '0.85em',
-                                                cursor: 'pointer',
-                                                backgroundColor: '#4CAF50',
-                                                color: 'white',
-                                                border: 'none',
-                                                borderRadius: '4px'
-                                              }}
-                                            >
-                                              Complete Mission
-                                            </button>
-                                          )}
-                                        </div>
-                                      )
-                                    }
-                                    
-                                    // Standard format for object missions and other types
-                                    let missionTitle = ''
-                                    let missionDescription = ''
-                                    
-                                    if (missionType === 'object') {
-                                      missionTitle = mission.title || 'Object Mission'
-                                      missionDescription = mission.mission_body || 'No description'
-                                    } else {
-                                      missionTitle = mission.title || 'Mission'
-                                      missionDescription = mission.mission_body || mission.description || ''
-                                    }
-                                    
-                                    return (
-                                      <div 
-                                        key={`${user.id}-${mission.id}-${idx}-${missionType}`} 
-                                        style={{ 
-                                          fontSize: '0.9em',
-                                          padding: '6px',
-                                          backgroundColor: mission.completed ? '#f0f8f0' : '#f9f9f9',
-                                          borderRadius: '4px',
-                                          border: mission.completed ? '1px solid #90ee90' : '1px solid #ddd'
+                {sessionUsers.map(user => {
+                  const missions = playerMissions.filter(m => m.userId === user.id)
+                  const phases = [0, 1, 2, 3].filter(p => missions.some(m => m.phase === p))
+                  const currentPhase = activeSession.current_phase || 0
+
+                  return (
+                    <div key={user.id} style={{ marginBottom: '16px', padding: '12px', border: '1px solid #ddd', borderRadius: '6px' }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                        {user.firstname} {user.lastname}
+                        <span style={{ fontWeight: 'normal', color: '#888', marginLeft: '8px' }}>
+                          {user.alias_1} {user.alias_2}
+                        </span>
+                        <span style={{ marginLeft: '8px', fontSize: '0.85em', color: '#666' }}>
+                          {missions.filter(m => m.completed).length}/{missions.length} completed
+                        </span>
+                      </div>
+                      {phases.length === 0 ? (
+                        <span style={{ fontStyle: 'italic', color: '#888' }}>No missions assigned</span>
+                      ) : (
+                        phases.map(phase => {
+                          const phaseMissions = missions.filter(m => m.phase === phase)
+                          const isLocked = phase < currentPhase
+                          return (
+                            <div key={phase} style={{ marginBottom: '8px' }}>
+                              <div style={{ fontSize: '0.85em', fontWeight: 'bold', color: isLocked ? '#999' : '#333', marginBottom: '4px' }}>
+                                Phase {phase} {isLocked ? '(Locked)' : phase === currentPhase ? '(Current)' : ''}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingLeft: '12px' }}>
+                                {phaseMissions.map(m => (
+                                  <div
+                                    key={m.playerMissionId}
+                                    style={{
+                                      fontSize: '0.9em',
+                                      padding: '6px 8px',
+                                      backgroundColor: m.completed ? '#f0f8f0' : isLocked ? '#f5f5f5' : '#f9f9f9',
+                                      borderRadius: '4px',
+                                      border: m.completed ? '1px solid #90ee90' : '1px solid #ddd',
+                                      opacity: isLocked && !m.completed ? 0.6 : 1,
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center'
+                                    }}
+                                  >
+                                    <div>
+                                      <strong>{m.title}</strong>
+                                      {m.variableValue && (
+                                        <span style={{ color: '#666', marginLeft: '6px', fontSize: '0.85em' }}>
+                                          [{m.variableValue}]
+                                        </span>
+                                      )}
+                                      <span style={{ color: '#999', marginLeft: '6px', fontSize: '0.8em' }}>
+                                        ({m.completionType})
+                                      </span>
+                                      {m.completed && (
+                                        <span style={{ color: 'green', marginLeft: '8px', fontSize: '0.85em' }}>
+                                          Done{m.signerName ? ` (signed by ${m.signerName})` : ''}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {!m.completed && !isLocked && (
+                                      <button
+                                        onClick={() => handleRequestCompleteMission(m.playerMissionId, m.userId)}
+                                        style={{
+                                          padding: '3px 8px',
+                                          fontSize: '0.8em',
+                                          cursor: 'pointer',
+                                          backgroundColor: '#4CAF50',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '4px'
                                         }}
                                       >
-                                        <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
-                                          {missionType === 'object' && '🎯 '}
-                                          {missionTitle}
-                                          {mission.completed && (
-                                            <span style={{ color: 'green', marginLeft: '8px', fontSize: '0.85em' }}>✓ Completed</span>
-                                          )}
-                                        </div>
-                                        <div style={{ fontSize: '0.85em', color: '#666' }}>
-                                          {missionDescription && missionDescription.length > 60 
-                                            ? missionDescription.substring(0, 60) + '...'
-                                            : missionDescription
-                                          }
-                                        </div>
-                                        {!mission.completed && (
-                                          <button
-                                            onClick={() => handleRequestCompleteMission(mission, user.id)}
-                                            style={{
-                                              marginTop: '6px',
-                                              padding: '4px 8px',
-                                              fontSize: '0.85em',
-                                              cursor: 'pointer',
-                                              backgroundColor: '#4CAF50',
-                                              color: 'white',
-                                              border: 'none',
-                                              borderRadius: '4px'
-                                            }}
-                                          >
-                                            Complete Mission
-                                          </button>
-                                        )}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              )}
-                            </td>
-                            <td style={{ padding: 'var(--unit-base)' }}>
-                              <div style={{ fontWeight: 'bold' }}>
-                                {missions.length} / 3
+                                        Complete
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
-                              <div style={{ fontSize: '0.85em', color: '#666' }}>
-                                {missions.filter(m => m.completed).length} completed
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
         )}
+
       </div>
 
       {/* Create Session Modal */}
@@ -1091,22 +818,6 @@ function AdminDashboard({ currentUser, onLogout }) {
                   placeholder="Enter session name"
                   disabled={creatingSession}
                 />
-              </div>
-
-              <div className="admin-form-group">
-                <label htmlFor="refresh-interval">Mission Refresh Interval (minutes)</label>
-                <input
-                  id="refresh-interval"
-                  type="number"
-                  min="1"
-                  value={refreshIntervalMinutes}
-                  onChange={(e) => setRefreshIntervalMinutes(parseInt(e.target.value) || 15)}
-                  placeholder="15"
-                  disabled={creatingSession}
-                />
-                <small style={{ color: '#888', fontSize: '0.9em' }}>
-                  How often missions will refresh for players (default: 15 minutes)
-                </small>
               </div>
 
               <div className="admin-form-group">
@@ -1190,22 +901,6 @@ function AdminDashboard({ currentUser, onLogout }) {
               </div>
 
               <div className="admin-form-group">
-                <label htmlFor="edit-refresh-interval">Mission Refresh Interval (minutes)</label>
-                <input
-                  id="edit-refresh-interval"
-                  type="number"
-                  min="1"
-                  value={refreshIntervalMinutes}
-                  onChange={(e) => setRefreshIntervalMinutes(parseInt(e.target.value) || 15)}
-                  placeholder="15"
-                  disabled={editingSession}
-                />
-                <small style={{ color: '#888', fontSize: '0.9em' }}>
-                  How often missions will refresh for players (default: 15 minutes)
-                </small>
-              </div>
-
-              <div className="admin-form-group">
                 <div className="admin-form-header">
                   <label>Select Players ({selectedUsers.size} selected)</label>
                   <button 
@@ -1257,17 +952,226 @@ function AdminDashboard({ currentUser, onLogout }) {
         </div>
       )}
 
+      {/* Global Mission Manager */}
+      {showMissionManager && (
+        <div className="admin-modal-overlay" onClick={() => setShowMissionManager(false)}>
+          <div className="admin-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '80vh', overflow: 'auto' }}>
+            <div className="admin-modal-header">
+              <h2>Phase Missions</h2>
+              <button className="admin-modal-close" onClick={() => setShowMissionManager(false)}>x</button>
+            </div>
+            <div className="admin-modal-body">
+              <div style={{ marginBottom: '12px' }}>
+                <button onClick={() => handleOpenMissionModal()} className="button-primary">
+                  Add Mission
+                </button>
+              </div>
+              {loadingPhaseMissions ? (
+                <p>Loading missions...</p>
+              ) : phaseMissions.length === 0 ? (
+                <p style={{ fontStyle: 'italic', color: '#888' }}>No missions defined yet.</p>
+              ) : (
+                [0, 1, 2, 3].map(phase => {
+                  const missions = phaseMissions.filter(m => m.phase === phase)
+                  if (missions.length === 0) return null
+                  return (
+                    <div key={phase} style={{ marginBottom: '16px' }}>
+                      <h3 style={{ marginBottom: '8px' }}>Phase {phase} ({missions.length} missions)</h3>
+                      {missions.map(m => (
+                        <div key={m.id} style={{ padding: '8px', marginBottom: '4px', backgroundColor: '#f9f9f9', borderRadius: '4px', border: '1px solid #ddd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ flex: 1 }}>
+                            <strong>{m.title}</strong>
+                            <span style={{ color: '#999', marginLeft: '8px', fontSize: '0.85em' }}>
+                              {m.completion_type}{m.bounty ? ` | ${m.bounty}pts` : ''}{m.variable_pool ? ' | has variables' : ''}{m.variable_source === 'participants' ? ' | player var' : ''}{m.signer_constraint && m.signer_constraint !== 'any' ? ` | ${m.signer_constraint}` : ''}
+                            </span>
+                            <div style={{ fontSize: '0.85em', color: '#666', marginTop: '2px' }}>
+                              {m.mission_body.length > 100 ? m.mission_body.substring(0, 100) + '...' : m.mission_body}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px', marginLeft: '8px' }}>
+                            <button onClick={() => handleOpenMissionModal(m)} className="button-secondary" style={{ padding: '3px 8px', fontSize: '0.8em' }}>Edit</button>
+                            <button onClick={() => handleDeleteMission(m.id)} className="logout-button" style={{ padding: '3px 8px', fontSize: '0.8em' }}>Delete</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mission Create/Edit Modal */}
+      {showMissionModal && (
+        <div className="admin-modal-overlay" onClick={() => setShowMissionModal(false)}>
+          <div className="admin-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="admin-modal-header">
+              <h2>{editingMission ? 'Edit Mission' : 'Add Mission'}</h2>
+              <button className="admin-modal-close" onClick={() => setShowMissionModal(false)}>x</button>
+            </div>
+            <div className="admin-modal-body">
+              <div className="admin-form-group">
+                <label>Phase</label>
+                <select
+                  value={missionForm.phase}
+                  onChange={(e) => setMissionForm({ ...missionForm, phase: parseInt(e.target.value) })}
+                >
+                  <option value={0}>Phase 0 (Icebreaker)</option>
+                  <option value={1}>Phase 1 (Act I)</option>
+                  <option value={2}>Phase 2 (Act II)</option>
+                  <option value={3}>Phase 3 (Act III)</option>
+                </select>
+              </div>
+              <div className="admin-form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={missionForm.title}
+                  onChange={(e) => setMissionForm({ ...missionForm, title: e.target.value })}
+                  placeholder="Mission title"
+                />
+              </div>
+              <div className="admin-form-group">
+                <label>Mission Body</label>
+                <textarea
+                  value={missionForm.missionBody}
+                  onChange={(e) => setMissionForm({ ...missionForm, missionBody: e.target.value })}
+                  placeholder="Use {variable} for the individualized element"
+                  rows={3}
+                  style={{ width: '100%', fontFamily: 'inherit', fontSize: 'inherit', padding: '8px' }}
+                />
+              </div>
+              <div className="admin-form-group">
+                <label>Completion Type</label>
+                <select
+                  value={missionForm.completionType}
+                  onChange={(e) => setMissionForm({ ...missionForm, completionType: e.target.value })}
+                >
+                  <option value="phrase">Phrase (player types an answer)</option>
+                  <option value="signoff">Sign-off (another player confirms)</option>
+                </select>
+              </div>
+              {missionForm.completionType === 'phrase' && (
+                <div className="admin-form-group">
+                  <label>Success Key (correct answer)</label>
+                  <input
+                    type="text"
+                    value={missionForm.successKey}
+                    onChange={(e) => setMissionForm({ ...missionForm, successKey: e.target.value })}
+                    placeholder="The answer to validate against"
+                  />
+                </div>
+              )}
+              {missionForm.completionType === 'signoff' && (
+                <>
+                  <div className="admin-form-group">
+                    <label>Sign-off Prompt Template</label>
+                    <textarea
+                      value={missionForm.signoffPromptTemplate}
+                      onChange={(e) => setMissionForm({ ...missionForm, signoffPromptTemplate: e.target.value })}
+                      placeholder="{player_name} did the thing I asked them to do."
+                      rows={2}
+                      style={{ width: '100%', fontFamily: 'inherit', fontSize: 'inherit', padding: '8px' }}
+                    />
+                    <small style={{ color: '#888' }}>
+                      Placeholders: {'{player_name}'}, {'{variable}'}
+                    </small>
+                  </div>
+                  <div className="admin-form-group">
+                    <label>Signer Constraint</label>
+                    <select
+                      value={missionForm.signerConstraint}
+                      onChange={(e) => setMissionForm({ ...missionForm, signerConstraint: e.target.value })}
+                    >
+                      <option value="any">Any other player</option>
+                      <option value="new_signer">Must be a new signer</option>
+                      <option value="same_signer">Must be the same signer as another mission</option>
+                      <option value="admin_only">Admin only (hosts)</option>
+                    </select>
+                  </div>
+                  {missionForm.signerConstraint === 'same_signer' && (
+                    <div className="admin-form-group">
+                      <label>Same Signer As Mission</label>
+                      <select
+                        value={missionForm.sameSigerMissionId || ''}
+                        onChange={(e) => setMissionForm({ ...missionForm, sameSigerMissionId: e.target.value ? parseInt(e.target.value) : null })}
+                      >
+                        <option value="">-- Select mission --</option>
+                        {phaseMissions
+                          .filter(m => m.completion_type === 'signoff' && m.id !== editingMission?.id)
+                          .map(m => (
+                            <option key={m.id} value={m.id}>Phase {m.phase}: {m.title}</option>
+                          ))
+                        }
+                      </select>
+                    </div>
+                  )}
+                </>
+              )}
+              <div className="admin-form-group">
+                <label>Variable Source</label>
+                <select
+                  value={missionForm.variableSource}
+                  onChange={(e) => setMissionForm({ ...missionForm, variableSource: e.target.value })}
+                >
+                  <option value="pool">Static pool (comma-separated list below)</option>
+                  <option value="participants">Session participants (assigns a random other player)</option>
+                </select>
+              </div>
+              {missionForm.variableSource === 'pool' && (
+                <div className="admin-form-group">
+                  <label>Variable Pool (comma-separated, leave blank for none)</label>
+                  <input
+                    type="text"
+                    value={missionForm.variablePool}
+                    onChange={(e) => setMissionForm({ ...missionForm, variablePool: e.target.value })}
+                    placeholder="French, Italian, Spanish, German"
+                  />
+                </div>
+              )}
+              <div className="admin-form-group">
+                <label>Bounty (points awarded on completion)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={missionForm.bounty}
+                  onChange={(e) => setMissionForm({ ...missionForm, bounty: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="admin-form-group">
+                <label>Sort Order</label>
+                <input
+                  type="number"
+                  value={missionForm.sortOrder}
+                  onChange={(e) => setMissionForm({ ...missionForm, sortOrder: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button onClick={() => setShowMissionModal(false)} className="button-secondary">
+                Cancel
+              </button>
+              <button onClick={handleSaveMission} className="button-primary">
+                {editingMission ? 'Update' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Complete Mission Confirmation Modal */}
       {showCompleteConfirm && completingMission && (
         <div className="admin-modal-overlay" onClick={handleCancelCompleteMission}>
           <div className="admin-modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="admin-modal-header">
               <h2>Complete Mission</h2>
-              <button 
-                className="admin-modal-close" 
+              <button
+                className="admin-modal-close"
                 onClick={handleCancelCompleteMission}
               >
-                ×
+                x
               </button>
             </div>
             <div className="admin-modal-body">
@@ -1277,13 +1181,13 @@ function AdminDashboard({ currentUser, onLogout }) {
               </p>
             </div>
             <div className="admin-modal-actions">
-              <button 
+              <button
                 onClick={handleCancelCompleteMission}
                 className="button-secondary"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={handleConfirmCompleteMission}
                 className="button-primary"
                 style={{ backgroundColor: '#4CAF50' }}
@@ -1294,6 +1198,7 @@ function AdminDashboard({ currentUser, onLogout }) {
           </div>
         </div>
       )}
+
     </div>
   )
 }
