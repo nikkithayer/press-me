@@ -13,6 +13,7 @@ import * as objectMissions from './api/objectMissions.js';
 import * as sessions from './api/sessions.js';
 import * as assignments from './api/assignments.js';
 import * as voting from './api/voting.js';
+import * as phaseMissions from './api/phaseMissions.js';
 
 // Assemble the neonApi object with all functions
 export const neonApi = {
@@ -82,4 +83,21 @@ export const neonApi = {
   // Voting
   hasSubmittedIntel: voting.hasSubmittedIntel,
   submitIntel: voting.submitIntel,
+
+  // Phase Missions
+  createPhaseMission: phaseMissions.createPhaseMission,
+  getPhaseMissions: phaseMissions.getPhaseMissions,
+  updatePhaseMission: phaseMissions.updatePhaseMission,
+  deletePhaseMission: phaseMissions.deletePhaseMission,
+  assignPhaseToPlayers: phaseMissions.assignPhaseToPlayers,
+  getPlayerMissions: phaseMissions.getPlayerMissions,
+  getSessionParticipants: phaseMissions.getSessionParticipants,
+  completePhaseMission: phaseMissions.completePhaseMission,
+  signOffMission: phaseMissions.signOffMission,
+  adminCompletePhaseMission: phaseMissions.adminCompletePhaseMission,
+  getAllPlayerMissionsForSession: phaseMissions.getAllPlayerMissionsForSession,
+  markBountyPaid: phaseMissions.markBountyPaid,
+
+  // Sessions (new)
+  advancePhase: sessions.advancePhase,
 };
