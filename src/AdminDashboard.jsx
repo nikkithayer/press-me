@@ -146,6 +146,7 @@ function AdminDashboard({ currentUser, onLogout }) {
   const [usersTabList, setUsersTabList] = useState([])
   const [loadingUsersTab, setLoadingUsersTab] = useState(false)
   const [showPassphrases, setShowPassphrases] = useState(false)
+  const [expandedSessions, setExpandedSessions] = useState(new Set())
 
   // Tab state
   const [activeTab, setActiveTab] = useState('sessions')
@@ -650,86 +651,75 @@ function AdminDashboard({ currentUser, onLogout }) {
                     </p>
                   ) : (
                     <ul>
-                      {Array.isArray(sessions) && sessions.map(session => (
-                        <li key={session.id}>
-                          <div className="session-item">
-                            <h3>{session.name}</h3>
-                            <div className="session-info">
-                              <p className={`session-status status-${session.status}`}>Status: {session.status}</p>
-                              <p>Players: {session.participant_user_ids?.length || 0}</p>
-                              {session.created_at && (
-                                <p>Created: {formatTimestamp(session.created_at)}</p>
-                              )}
-                              {session.started_at && (
-                                <p>Started: {formatTimestamp(session.started_at)}</p>
-                              )}
-                              {session.paused_at && (
-                                <p>Paused: {formatTimestamp(session.paused_at)}</p>
-                              )}
-                              {session.ended_at && (
-                                <p>Ended: {formatTimestamp(session.ended_at)}</p>
-                              )}
-                            </div>
-                            <div className="session-actions">
-                              {session.status === 'draft' && (
+                      {Array.isArray(sessions) && sessions.map(session => {
+                        const isActive = session.status === 'active'
+                        const isExpanded = isActive || expandedSessions.has(session.id)
+                        const toggleExpand = () => {
+                          if (isActive) return
+                          const next = new Set(expandedSessions)
+                          if (next.has(session.id)) next.delete(session.id)
+                          else next.add(session.id)
+                          setExpandedSessions(next)
+                        }
+
+                        return (
+                          <li key={session.id}>
+                            <div className={`session-item${isActive ? ' active' : ' collapsed'}`}>
+                              <div className="session-item-header" onClick={!isActive ? toggleExpand : undefined}>
+                                <h3>{session.name}</h3>
+                                <span className={`session-status status-${session.status}`}>{session.status}</span>
+                                {!isActive && (
+                                  <span className="session-expand-icon">{isExpanded ? '▾' : '▸'}</span>
+                                )}
+                              </div>
+                              {isExpanded && (
                                 <>
-                                  <button onClick={() => handleOpenEditModal(session)} className="button-secondary">
-                                    Edit
-                                  </button>
-                                  <button onClick={() => handleStartSession(session.id)} className="button-primary">
-                                    Start Session
-                                  </button>
-                                </>
-                              )}
-                              {session.status === 'active' && (
-                                <>
-                                  {(session.current_phase || 0) < 3 && (
-                                    <button
-                                      onClick={() => handleAdvancePhase()}
-                                      className="button-primary"
-                                      disabled={advancingPhase}
-                                    >
-                                      {advancingPhase ? 'Advancing...' : `Advance to Phase ${(session.current_phase || 0) + 1}`}
-                                    </button>
-                                  )}
-                                  <button onClick={() => handlePauseSession(session.id)} className="button-secondary">
-                                    Pause
-                                  </button>
-                                  <button onClick={() => handleEndSession(session.id)} className="logout-button">
-                                    End Session
-                                  </button>
-                                </>
-                              )}
-                              {session.status === 'paused' && (
-                                <>
-                                  <button onClick={() => handleOpenEditModal(session)} className="button-secondary">
-                                    Edit
-                                  </button>
-                                  <button onClick={() => handleResumeSession(session.id)} className="button-primary">
-                                    Resume
-                                  </button>
-                                  <button onClick={() => handleEndSession(session.id)} className="logout-button">
-                                    End Session
-                                  </button>
-                                  <button onClick={() => handleResetSession(session.id)} className="logout-button" style={{ backgroundColor: '#d32f2f' }}>
-                                    Reset Session
-                                  </button>
-                                </>
-                              )}
-                              {session.status === 'ended' && (
-                                <>
-                                  <button onClick={() => handleOpenEditModal(session)} className="button-secondary">
-                                    Edit
-                                  </button>
-                                  <button onClick={() => handleResetSession(session.id)} className="logout-button" style={{ backgroundColor: '#d32f2f' }}>
-                                    Reset Session
-                                  </button>
+                                  <div className="session-info">
+                                    <p>Players: {session.participant_user_ids?.length || 0}</p>
+                                    {session.created_at && <p>Created: {formatTimestamp(session.created_at)}</p>}
+                                    {session.started_at && <p>Started: {formatTimestamp(session.started_at)}</p>}
+                                    {session.paused_at && <p>Paused: {formatTimestamp(session.paused_at)}</p>}
+                                    {session.ended_at && <p>Ended: {formatTimestamp(session.ended_at)}</p>}
+                                  </div>
+                                  <div className="session-actions">
+                                    {session.status === 'draft' && (
+                                      <>
+                                        <button onClick={() => handleOpenEditModal(session)} className="button-secondary">Edit</button>
+                                        <button onClick={() => handleStartSession(session.id)} className="button-primary">Start Session</button>
+                                      </>
+                                    )}
+                                    {session.status === 'active' && (
+                                      <>
+                                        {(session.current_phase || 0) < 3 && (
+                                          <button onClick={() => handleAdvancePhase()} className="button-primary" disabled={advancingPhase}>
+                                            {advancingPhase ? 'Advancing...' : `Advance to Phase ${(session.current_phase || 0) + 1}`}
+                                          </button>
+                                        )}
+                                        <button onClick={() => handlePauseSession(session.id)} className="button-secondary">Pause</button>
+                                        <button onClick={() => handleEndSession(session.id)} className="logout-button">End Session</button>
+                                      </>
+                                    )}
+                                    {session.status === 'paused' && (
+                                      <>
+                                        <button onClick={() => handleOpenEditModal(session)} className="button-secondary">Edit</button>
+                                        <button onClick={() => handleResumeSession(session.id)} className="button-primary">Resume</button>
+                                        <button onClick={() => handleEndSession(session.id)} className="logout-button">End Session</button>
+                                        <button onClick={() => handleResetSession(session.id)} className="logout-button" style={{ backgroundColor: '#d32f2f' }}>Reset</button>
+                                      </>
+                                    )}
+                                    {session.status === 'ended' && (
+                                      <>
+                                        <button onClick={() => handleOpenEditModal(session)} className="button-secondary">Edit</button>
+                                        <button onClick={() => handleResetSession(session.id)} className="logout-button" style={{ backgroundColor: '#d32f2f' }}>Reset</button>
+                                      </>
+                                    )}
+                                  </div>
                                 </>
                               )}
                             </div>
-                          </div>
-                        </li>
-                      ))}
+                          </li>
+                        )
+                      })}
                     </ul>
                   )}
                 </div>
@@ -765,18 +755,30 @@ function AdminDashboard({ currentUser, onLogout }) {
                     <h3>Phase {phase} ({missions.length} missions)</h3>
                     {missions.map(m => (
                       <div key={m.id} className="mission-list-item">
-                        <div className="mission-list-item-info">
+                        <div className="mission-list-item-header">
                           <strong>{m.title}</strong>
-                          <span className="mission-meta">
-                            {m.completion_type}{m.bounty ? ` | ${m.bounty}pts` : ''}{m.variable_pool ? ' | has variables' : ''}{m.variable_source === 'participants' ? ' | player var' : ''}{m.signer_constraint && m.signer_constraint !== 'any' ? ` | ${m.signer_constraint}` : ''}
-                          </span>
-                          <div className="mission-body-preview">
-                            {m.mission_body.length > 100 ? m.mission_body.substring(0, 100) + '...' : m.mission_body}
+                          <div className="mission-list-item-actions">
+                            <button onClick={() => handleOpenMissionModal(m)} className="mission-icon-btn" title="Edit">
+                              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" />
+                              </svg>
+                            </button>
+                            <button onClick={() => handleDeleteMission(m.id)} className="mission-icon-btn mission-icon-btn-danger" title="Delete">
+                              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 10h8l1-10" />
+                              </svg>
+                            </button>
                           </div>
                         </div>
-                        <div className="mission-list-item-actions">
-                          <button onClick={() => handleOpenMissionModal(m)} className="button-secondary" style={{ padding: '3px 8px', fontSize: '0.8em' }}>Edit</button>
-                          <button onClick={() => handleDeleteMission(m.id)} className="logout-button" style={{ padding: '3px 8px', fontSize: '0.8em' }}>Delete</button>
+                        <span className="mission-meta">
+                          <span className="mission-tag tag-completion">{m.completion_type}</span>
+                          {m.bounty ? <span className="mission-tag tag-bounty">{m.bounty}pts</span> : null}
+                          {m.signer_constraint && m.signer_constraint !== 'any' ? <span className="mission-tag tag-constraint">{m.signer_constraint.replace(/_/g, ' ')}</span> : null}
+                          {m.variable_pool ? <span className="mission-tag tag-variable">variables</span> : null}
+                          {m.variable_source === 'participants' ? <span className="mission-tag tag-variable">player var</span> : null}
+                        </span>
+                        <div className="mission-body-preview">
+                          {m.mission_body.length > 100 ? m.mission_body.substring(0, 100) + '...' : m.mission_body}
                         </div>
                       </div>
                     ))}

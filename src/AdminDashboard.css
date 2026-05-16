@@ -201,6 +201,35 @@ body:has(.admin-dashboard) {
   border-radius: 4px;
 }
 
+.session-item.collapsed {
+  opacity: 0.75;
+}
+
+.session-item.collapsed:hover {
+  opacity: 1;
+}
+
+.session-item-header {
+  display: flex;
+  align-items: center;
+  gap: var(--unit-sm);
+}
+
+.session-item.collapsed .session-item-header {
+  cursor: pointer;
+}
+
+.session-item-header h3 {
+  margin: 0;
+  flex: 1;
+}
+
+.session-expand-icon {
+  font-size: 0.8em;
+  color: #999;
+  flex-shrink: 0;
+}
+
 .session-item h3 {
   font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
   font-size: 1rem;
@@ -821,22 +850,61 @@ body:has(.admin-dashboard) {
 .mission-list-item {
   padding: var(--unit-sm);
   margin-bottom: 4px;
-  background-color: #f9f9f9;
   border-radius: 4px;
-  border: 1px solid #ddd;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  border: 1px solid rgba(46, 40, 36, 0.25);
 }
 
-.mission-list-item-info {
+.mission-list-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.mission-list-item-header strong {
   flex: 1;
+  min-width: 0;
 }
 
 .mission-meta {
-  color: #999;
-  margin-left: var(--unit-sm);
-  font-size: 0.85em;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+
+.mission-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.78em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.4;
+}
+
+.tag-completion {
+  background-color: var(--brown);
+  color: var(--black);
+}
+
+.tag-bounty {
+  background-color: var(--green);
+  color: var(--black);
+}
+
+.tag-constraint {
+  background-color: var(--blue);
+  color: var(--white);
+}
+
+.tag-variable {
+  background-color: var(--yellow);
+  color: var(--black);
+  border: 1px solid var(--black);
 }
 
 .mission-body-preview {
@@ -848,8 +916,34 @@ body:has(.admin-dashboard) {
 .mission-list-item-actions {
   display: flex;
   gap: 4px;
-  margin-left: var(--unit-sm);
+  margin-left: auto;
   flex-shrink: 0;
+}
+
+.mission-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: var(--white);
+  color: var(--black);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mission-icon-btn:hover {
+  background-color: var(--green);
+  border-color: var(--black);
+}
+
+.mission-icon-btn-danger:hover {
+  background-color: var(--red);
+  border-color: var(--black);
+  color: var(--white);
 }
 
 /* Users tab - table */
