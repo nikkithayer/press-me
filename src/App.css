@@ -151,7 +151,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: var(--black);
+  background-color: var(--white);
 }
 
 .dashboard-header {
@@ -169,7 +169,6 @@
   box-sizing: border-box;
   overflow-x: hidden;
   padding-top: var(--unit-sm);
-  background-color: var(--black);
 }
 
 .dashboard-tabs {
@@ -203,9 +202,9 @@
   border-top: 2px solid var(--black);
 }
 
-.tab-button.tab-agent{
-  color: var(--black);
-  background-color: var(--yellow);
+.tab-button.tab-briefing{
+  color: var(--white);
+  background-color: var(--black);
   border-left: 4px solid var(--black);
 }
 
@@ -225,11 +224,59 @@
 }
 
 .dashboard-content.dashboard-content-agent{
-  background-color: var(--yellow);
+  background-color: var(--black);
+}
+
+.dashboard-container .dashboard-content-agent .loading-spinner p {
+  color: var(--white);
+}
+
+.dashboard-container .dashboard-content-agent .spinner {
+  border: 3px solid rgba(245, 231, 203, 0.2);
+  border-top: 3px solid var(--red);
+}
+
+.dashboard-container .dashboard-content-agent .tab-content > h1,
+.dashboard-container .dashboard-content-agent .tab-content > p {
+  color: var(--white);
 }
 
 .dashboard-content.dashboard-content-missions{
   background-color: var(--red);
+}
+
+.dashboard-container .dashboard-content-missions .loading-spinner p {
+  color: var(--white);
+}
+
+.dashboard-container .dashboard-content-missions .spinner {
+  border: 3px solid rgba(245, 231, 203, 0.25);
+  border-top: 3px solid var(--black);
+}
+
+.dashboard-container .dashboard-content-missions .tab-content > h1,
+.dashboard-container .dashboard-content-missions .tab-content > p {
+  color: var(--white);
+}
+
+.dashboard-content-missions .completed-missions {
+  border-color: var(--white);
+}
+
+.dashboard-content-missions .completed-missions h3,
+.dashboard-content-missions .completed-missions li {
+  color: var(--white);
+}
+
+
+
+.dashboard-container .loading-spinner p {
+  color: var(--black);
+}
+
+.dashboard-container .spinner {
+  border: 3px solid rgba(46, 40, 36, 0.15);
+  border-top: 3px solid var(--red);
 }
 
 .tab-content {
@@ -283,21 +330,25 @@
   cursor: pointer;
 }
 
-.mission-card.clickable:hover {
-  transform: scale(1.02);
+.mission-card:nth-child(even).clickable:hover {
+  transform: scale(1.02) rotate(-0.25deg);
+}
+
+.mission-card:nth-child(odd).clickable:hover {
+  transform: scale(1.02) rotate(0.25deg);
 }
 
 .mission-card:nth-child(even){
-  transform: rotate(-1deg);
+  transform: rotate(-0.25deg);
   box-shadow: -5px 5px 0px 0 var(--black);
 }
 
 .mission-card:nth-child(odd){
-  transform: rotate(1deg);
-  box-shadow: 5px 5px 0px 0 var(--black);
+  transform: rotate(0.25deg);
+  box-shadow: -5px 5px 0px 0 var(--black);
 }
 
-.mission-card:nth-child(3n) h3, .mission-card:nth-child(3n) .success-key-field::placeholder{
+.mission-card:nth-child(3n) .success-key-field::placeholder{
   color: var(--red);
 }
 
@@ -305,7 +356,7 @@
   border: 2px solid var(--red);
 }
 
-.mission-card:nth-child(3n+1) h3, .mission-card:nth-child(3n+1) .success-key-field::placeholder{
+.mission-card:nth-child(3n+1) .success-key-field::placeholder{
   color: var(--blue);
 }
 
@@ -313,7 +364,7 @@
   border: 2px solid var(--blue);
 }
 
-.mission-card:nth-child(3n+2) h3, .mission-card:nth-child(3n+2) .success-key-field::placeholder{
+.mission-card:nth-child(3n+2) .success-key-field::placeholder{
   color: var(--green);
 }
 
@@ -344,8 +395,9 @@
   margin: 0;
   font-size: 1em;
   text-transform: uppercase;
-  font-weight: 500;
+  font-weight: 700;
   flex: 1;
+  color: var(--black);
 }
 
 .mission-card p.mission-body-line{
@@ -372,6 +424,7 @@
   font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.2;
   margin: 0 0 var(--unit-sm) 0;
+  color: var(--black);
 }
 
 .status-badge {
@@ -492,7 +545,6 @@
   color: var(--white);
   margin: var(--unit-base);
   padding: var(--unit-sm);
-  transform: rotate(-1deg);
 }
 
 .agent-card h3, .backstory-card h3 {
@@ -610,7 +662,6 @@
   color: var(--black);
   margin: var(--unit-base);
   padding: var(--unit-sm);
-  transform: rotate(1deg);
   box-shadow: -5px 5px 0px 0 var(--black);
 }
 
@@ -661,6 +712,8 @@
   margin: var(--unit-sm) 0;
   text-transform: uppercase;
   font-size: 1.5em;
+  font-weight: 700;
+  color: var(--black);
 }
 
 .modal .modal-content > p{

@@ -265,10 +265,10 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     <div className="dashboard-header">
       <div className="dashboard-tabs">
         <button
-          className={`tab-button tab-agent ${activeTab === 'agent' ? 'active' : ''}`}
+          className={`tab-button tab-briefing ${activeTab === 'agent' ? 'active' : ''}`}
           onClick={() => handleTabChange('agent')}
         >
-          AGENT
+          BRIEFING
         </button>
         <button
           className={`tab-button tab-missions ${activeTab === 'missions' ? 'active' : ''}`}
