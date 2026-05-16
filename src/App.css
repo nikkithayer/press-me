@@ -165,6 +165,29 @@
   border-right: 4px solid var(--black);
   border-bottom: 4px solid var(--black);
   padding-top: max(var(--unit-sm), env(safe-area-inset-top, 0px));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Sticky missions; inner list scrolls when long. Briefing + footer share .dashboard-page scroll. */
+.dashboard-missions-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex-shrink: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--red);
+  box-sizing: border-box;
+}
+
+.dashboard-missions-sticky .dashboard-content.dashboard-content-missions {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: calc(100dvh - max(var(--unit-sm), env(safe-area-inset-top, 0px)) - 4.5rem);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .dashboard-briefing-strip {
@@ -184,6 +207,8 @@
 
 /* Inverted mission card: black surface, white hard shadow (matches mission-card offset). */
 .briefing-strip-card {
+  display: flex;
+  align-items: center;
   background-color: var(--black);
   color: var(--white);
   box-sizing: border-box;
@@ -193,10 +218,24 @@
   box-shadow: -5px 5px 0px 0 var(--white);
 }
 
-.briefing-strip-row {
-  display: flex;
-  align-items: center;
-  gap: var(--unit-sm);
+button.briefing-strip-card {
+  margin: 0;
+  font: inherit;
+  border: none;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+button.briefing-strip-card:hover {
+  opacity: 0.92;
+}
+
+button.briefing-strip-card:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 2px;
 }
 
 .briefing-strip-label {
@@ -208,27 +247,6 @@
   line-height: 1.2;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--white);
-}
-
-.briefing-strip-open {
-  flex-shrink: 0;
-  margin: 0;
-  cursor: pointer;
-  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 0.85em;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--black);
-  background-color: var(--white);
-  border: 2px solid var(--black);
-  padding: var(--unit-xs) var(--unit-sm);
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.briefing-strip-open:hover {
-  background-color: var(--black);
   color: var(--white);
 }
 
@@ -326,13 +344,60 @@
   color: var(--white);
 }
 
-.dashboard-content-missions .completed-missions {
-  border-color: var(--white);
+/* Compact rows: completed (inverted) + missed missions from closed phases (minimized, inactive) */
+.missions-grid.missions-grid--compact {
+  gap: 0.5rem;
+  margin-bottom: var(--unit-base);
+  padding-top: 0;
 }
 
-.dashboard-content-missions .completed-missions h3,
-.dashboard-content-missions .completed-missions li {
+.dashboard-content-missions .mission-card.mission-card--unavailable {
+  background-color: rgba(0, 0, 0, 0.22);
+  border: none;
+  padding: calc(var(--unit-xs) * 0.65) var(--unit-sm);
+  cursor: default;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+.dashboard-content-missions .mission-card.mission-card--unavailable:nth-child(even),
+.dashboard-content-missions .mission-card.mission-card--unavailable:nth-child(odd) {
+  transform: none;
+  box-shadow: none;
+}
+
+.dashboard-content-missions .mission-card.mission-card--unavailable h3 {
+  margin: 0;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.75em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.72);
+  text-decoration: none;
+}
+
+.dashboard-content-missions .mission-card.mission-card--completed {
+  background-color: var(--black);
+  border: none;
+  padding: calc(var(--unit-xs) * 0.85) var(--unit-sm);
+}
+
+.dashboard-content-missions .mission-card.mission-card--completed:nth-child(even),
+.dashboard-content-missions .mission-card.mission-card--completed:nth-child(odd) {
+  transform: none;
+  box-shadow: -3px 3px 0 0 var(--white);
+}
+
+.dashboard-content-missions .mission-card.mission-card--completed h3 {
+  margin: 0;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.82em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  font-weight: 700;
   color: var(--white);
+  text-decoration: none;
 }
 
 
@@ -561,35 +626,6 @@
   cursor: pointer;
   transition: background-color 0.3s ease;
   margin-top: 1rem;
-}
-
-.completed-missions {
-  margin: var(--unit-base);
-  padding: var(--unit-sm);
-  border: 1px solid var(--black);
-  border-radius: var(--unit-xs);
-}
-
-.completed-missions h3 {
-  margin: 0 0 var(--unit-xs) 0;
-  font-size: 1.2em;
-  text-transform: uppercase;
-  font-weight: 600;
-  color: var(--black);
-}
-
-.completed-missions ul {
-  margin: 0;
-  padding-left: var(--unit-base);
-  list-style-type: disc;
-}
-
-.completed-missions li {
-  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 1em;
-  text-transform: uppercase;
-  color: var(--black);
-  margin-bottom: var(--unit-xs);
 }
 
 .retry-button:hover {
@@ -969,7 +1005,7 @@
 
 .modal.briefing-modal .briefing-modal-seal {
   display: block;
-  width: min(150px, 70vw);
+  width: min(120px, 70vw);
   max-height: 200px;
   height: auto;
   margin: 0 auto var(--unit-xs);

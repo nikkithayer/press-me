@@ -42,7 +42,7 @@ function formatWitnessSignedAt(iso) {
   return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-function BriefingModalPanel({ isClosing, onClose }) {
+function BriefingModalPanel({ isClosing, onClose, passphrase }) {
   return (
     <div className={`modal briefing-modal ${isClosing ? 'closing' : ''}`}>
       <div className="modal-header">
@@ -52,11 +52,15 @@ function BriefingModalPanel({ isClosing, onClose }) {
         <div className="backstory-card briefing-modal-card">
           <img className="briefing-modal-seal" src="/briefing-seal.png" alt="" />
           <h4>Briefing - TOP SECRET!!!</h4>
-          <p>We've been following the movements of a mysterious hacker known as <strong>tha_h4ck3rG0d</strong> and have reason to believe they are planning to detonate a doomsday device at some point on the evening of Saturday, May 16.</p>
+          <p>We've been following the movements of a mysterious hacker known as <strong>tha_h4ck3rG0d</strong> and have reason to believe they are planning to detonate a doomsday device at some point on the evening of <strong>Saturday, May 16</strong>.</p>
           <p>The device itself is located somewhere on the premises of <strong>MacGuffin Toys</strong>. You will be infiltrating the environment as part of their annual company party.</p>
           <p>Initial intelligence suggests the company's employees are not very bright.</p>
-          <p>Your mission is to determine the location of this doomsday device and disable it. We've prepared a series of smaller missions that will help you maintain cover and locate the device. You can do missions in any order.</p>
-          <p>Due to the severity of the threat, we may have sent a few too many agents to retrieve the device. If you see a fellow agent in disguise, please help them maintain their cover by playing along.</p>
+          <p>Your mission is to determine the location of this doomsday device and disable it. We've prepared a series of smaller missions that will help you locate the device. You can do missions in any order.</p>
+          <p>
+            Due to the severity of the threat, we may have sent a few too many agents to retrieve the device.
+            If you see a fellow agent in disguise, please help them maintain their cover by playing along.
+            You can also sign off on their missions using your secret passphrase: <strong>{passphrase || '—'}</strong>.
+          </p>
           <p><strong>Good luck, have fun, and don't get caught.</strong></p>
         </div>
       </div>
@@ -85,14 +89,9 @@ function BriefingStrip({ onOpenBriefing }) {
   return (
     <div className="dashboard-briefing-strip">
       <div className="tab-content dashboard-briefing-inner">
-        <div className="briefing-strip-card">
-          <div className="briefing-strip-row">
-            <div className="briefing-strip-label">Briefing</div>
-            <button type="button" className="briefing-strip-open" onClick={onOpenBriefing}>
-              Open
-            </button>
-          </div>
-        </div>
+        <button type="button" className="briefing-strip-card" onClick={onOpenBriefing}>
+          <span className="briefing-strip-label">Briefing</span>
+        </button>
       </div>
     </div>
   )
@@ -413,20 +412,22 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     return (
       <div className="dashboard-container">
         <div className="dashboard-page">
-          <div className="dashboard-missions-heading">MISSIONS</div>
-          <BriefingStrip onOpenBriefing={openBriefingModal} />
-          <div className="dashboard-content dashboard-content-missions">
-            <div className="tab-content">
-              <div className="loading-spinner">
-                <div className="spinner"></div>
-                <p>LOADING MISSION DATA...</p>
+          <div className="dashboard-missions-sticky">
+            <div className="dashboard-missions-heading">MISSIONS</div>
+            <div className="dashboard-content dashboard-content-missions">
+              <div className="tab-content">
+                <div className="loading-spinner">
+                  <div className="spinner"></div>
+                  <p>LOADING MISSION DATA...</p>
+                </div>
               </div>
             </div>
           </div>
+          <BriefingStrip onOpenBriefing={openBriefingModal} />
           <DashboardFooter currentUser={currentUser} onLogout={onLogout} />
         </div>
         {showBriefingModal && (
-          <BriefingModalPanel isClosing={isBriefingClosing} onClose={closeBriefingModal} />
+          <BriefingModalPanel isClosing={isBriefingClosing} onClose={closeBriefingModal} passphrase={currentUser?.passphrase} />
         )}
       </div>
     )
@@ -438,21 +439,23 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     return (
       <div className="dashboard-container">
         <div className="dashboard-page">
-          <div className="dashboard-missions-heading">MISSIONS</div>
-          <BriefingStrip onOpenBriefing={openBriefingModal} />
-          <div className="dashboard-content dashboard-content-missions">
-            <div className="tab-content">
-              <h1>ERROR</h1>
-              <p>{error}</p>
-              <div className="tab-actions">
-                <button type="button" onClick={fetchMissions} className="retry-button">RETRY</button>
+          <div className="dashboard-missions-sticky">
+            <div className="dashboard-missions-heading">MISSIONS</div>
+            <div className="dashboard-content dashboard-content-missions">
+              <div className="tab-content">
+                <h1>ERROR</h1>
+                <p>{error}</p>
+                <div className="tab-actions">
+                  <button type="button" onClick={fetchMissions} className="retry-button">RETRY</button>
+                </div>
               </div>
             </div>
           </div>
+          <BriefingStrip onOpenBriefing={openBriefingModal} />
           <DashboardFooter currentUser={currentUser} onLogout={onLogout} />
         </div>
         {showBriefingModal && (
-          <BriefingModalPanel isClosing={isBriefingClosing} onClose={closeBriefingModal} />
+          <BriefingModalPanel isClosing={isBriefingClosing} onClose={closeBriefingModal} passphrase={currentUser?.passphrase} />
         )}
       </div>
     )
@@ -465,22 +468,24 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   return (
     <div className="dashboard-container">
       <div className="dashboard-page">
-        <div className="dashboard-missions-heading">MISSIONS</div>
-        <BriefingStrip onOpenBriefing={openBriefingModal} />
-        <div className="dashboard-content dashboard-content-missions">
-          <MissionsTab
-            isInActiveSession={isInActiveSession}
-            missions={missions}
-            currentPhase={currentPhase}
-            completedMissions={completedMissions}
-            onMissionClick={openMissionModal}
-          />
+        <div className="dashboard-missions-sticky">
+          <div className="dashboard-missions-heading">MISSIONS</div>
+          <div className="dashboard-content dashboard-content-missions">
+            <MissionsTab
+              isInActiveSession={isInActiveSession}
+              missions={missions}
+              currentPhase={currentPhase}
+              completedMissions={completedMissions}
+              onMissionClick={openMissionModal}
+            />
+          </div>
         </div>
+        <BriefingStrip onOpenBriefing={openBriefingModal} />
         <DashboardFooter currentUser={currentUser} onLogout={onLogout} />
       </div>
 
       {showBriefingModal && (
-        <BriefingModalPanel isClosing={isBriefingClosing} onClose={closeBriefingModal} />
+        <BriefingModalPanel isClosing={isBriefingClosing} onClose={closeBriefingModal} passphrase={currentUser?.passphrase} />
       )}
 
       {showMissionModal && selectedMission && (

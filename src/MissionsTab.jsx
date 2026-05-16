@@ -15,21 +15,26 @@ function MissionsTab({ isInActiveSession, missions, currentPhase, completedMissi
   return (
     <div className="tab-content">
       {[0, 1, 2, 3].map(phase => {
-        const phaseMissions = missions.filter(m => m.phase === phase)
+        const phaseMissions = missions.filter(m => Number(m.phase) === phase)
         if (phaseMissions.length === 0) return null
-        const isLocked = phase < currentPhase
+        const cp = Number(currentPhase)
+        const isLocked = phase < cp
+
+        const incomplete = m => !completedMissions.has(m.playerMissionId)
+        const lockedIncomplete = phaseMissions.filter(m => isLocked && incomplete(m))
+        const compactCompleted = phaseMissions.filter(m => completedMissions.has(m.playerMissionId))
+        const fullCardMissions = phaseMissions.filter(m => incomplete(m) && !isLocked)
+        const showCompactRow = lockedIncomplete.length > 0 || compactCompleted.length > 0
 
         return (
           <div key={phase} style={{ marginBottom: '16px' }}>
-            <div className="missions-grid">
-              {phaseMissions
-                .filter(m => !completedMissions.has(m.playerMissionId))
-                .map(mission => (
+            {fullCardMissions.length > 0 && (
+              <div className="missions-grid">
+                {fullCardMissions.map(mission => (
                   <div
                     key={mission.playerMissionId}
-                    className={`mission-card ${!isLocked ? 'clickable' : ''}`}
-                    onClick={() => !isLocked && onMissionClick(mission.playerMissionId)}
-                    style={{ opacity: isLocked ? 0.5 : 1, pointerEvents: isLocked ? 'none' : 'auto' }}
+                    className="mission-card clickable"
+                    onClick={() => onMissionClick(mission.playerMissionId)}
                   >
                     <div className="mission-header">
                       <h3>{mission.title}</h3>
@@ -40,29 +45,28 @@ function MissionsTab({ isInActiveSession, missions, currentPhase, completedMissi
                     <p style={{ whiteSpace: 'pre-line' }}>{mission.missionBody}</p>
                   </div>
                 ))}
-            </div>
+              </div>
+            )}
 
-            {phaseMissions.some(m => completedMissions.has(m.playerMissionId)) && (
-              <div className="completed-missions">
-                <ul>
-                  {phaseMissions
-                    .filter(m => completedMissions.has(m.playerMissionId))
-                    .map(mission => (
-                      <li
-                        key={mission.playerMissionId}
-                        onClick={() => onMissionClick(mission.playerMissionId)}
-                        style={{ cursor: 'pointer', textDecoration: 'underline', position: 'relative', display: 'inline-block' }}
-                      >
-                        {mission.title}
-                        {mission.bountyPaid && mission.bounty > 0 && (
-                          <span className="paid-stamp">PAID</span>
-                        )}
-                        {mission.completed && !mission.bountyPaid && mission.bounty > 0 && (
-                          <span style={{ marginLeft: '6px', color: '#b8860b', fontWeight: 'bold', fontSize: '0.85em' }}>({mission.bounty}pts)</span>
-                        )}
-                      </li>
-                    ))}
-                </ul>
+            {showCompactRow && (
+              <div className="missions-grid missions-grid--compact">
+                {compactCompleted.map(mission => (
+                  <div
+                    key={mission.playerMissionId}
+                    className="mission-card mission-card--completed"
+                  >
+                    <h3>{mission.title}</h3>
+                  </div>
+                ))}
+                {lockedIncomplete.map(mission => (
+                  <div
+                    key={mission.playerMissionId}
+                    className="mission-card mission-card--unavailable"
+                    aria-disabled="true"
+                  >
+                    <h3>{mission.title}</h3>
+                  </div>
+                ))}
               </div>
             )}
           </div>
