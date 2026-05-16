@@ -134,9 +134,8 @@ body:has(.admin-dashboard) {
 
 .session-controls {
   display: flex;
-  gap: var(--unit-sm);
+  gap: 4px;
   flex-wrap: wrap;
-  margin-bottom: var(--unit-base);
 }
 
 .button-primary,
@@ -179,7 +178,7 @@ body:has(.admin-dashboard) {
 }
 
 .sessions-list {
-  margin-top: var(--unit-base);
+  margin-top: var(--unit-sm);
 }
 
 .sessions-list ul {
@@ -188,7 +187,7 @@ body:has(.admin-dashboard) {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--unit-sm);
+  gap: 4px;
 }
 
 .sessions-list li {
@@ -197,48 +196,42 @@ body:has(.admin-dashboard) {
 
 .session-item {
   background-color: var(--white);
-  border: 2px solid var(--black);
-  padding: var(--unit-base);
+  border: 1px solid var(--black);
+  padding: var(--unit-xs) var(--unit-sm);
   border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.session-item:hover {
-  background-color: #f5f0e5;
 }
 
 .session-item h3 {
   font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   color: var(--black);
-  margin: 0 0 var(--unit-xs) 0;
+  margin: 0;
 }
 
 .session-item p {
-  font-family: 'Jost', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 0.9rem;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.8rem;
   color: var(--black);
-  margin: 0 0 var(--unit-sm) 0;
-  opacity: 0.8;
+  margin: 0;
+  line-height: 1.4;
 }
 
 .session-item button {
   background-color: var(--red);
   color: var(--white);
   border: 2px solid var(--black);
-  padding: var(--unit-xs) var(--unit-sm);
+  padding: 2px var(--unit-xs);
   font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 1rem;
+  font-size: 0.8rem;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border-radius: 4px;
-  margin-top: var(--unit-sm);
+  border-radius: 3px;
+  margin-top: 2px;
 }
 
 .session-item button:hover {
@@ -246,18 +239,18 @@ body:has(.admin-dashboard) {
 }
 
 .session-details {
-  margin-top: var(--unit-base);
-  padding-top: var(--unit-base);
-  border-top: 2px solid var(--black);
+  margin-top: var(--unit-sm);
+  padding-top: var(--unit-sm);
+  border-top: 1px solid var(--black);
 }
 
 .session-info {
-  margin-bottom: var(--unit-sm);
+  margin-bottom: 2px;
 }
 
 .session-info p {
-  margin: var(--unit-xs) 0;
-  font-size: 0.9rem;
+  margin: 0;
+  font-size: 0.85rem;
 }
 
 .session-status {
@@ -290,9 +283,9 @@ body:has(.admin-dashboard) {
 
 .session-actions {
   display: flex;
-  gap: var(--unit-sm);
+  gap: 4px;
   flex-wrap: wrap;
-  margin-top: var(--unit-sm);
+  margin-top: 3px;
 }
 
 .session-ended {
