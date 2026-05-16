@@ -57,7 +57,6 @@ function App() {
                 alias1={currentUser?.alias_1} 
                 alias2={currentUser?.alias_2}
                 realName={currentUser?.firstname}
-                team={currentUser?.team}
                 onLogout={handleLogout}
               />
             ) : (
@@ -76,7 +75,6 @@ function App() {
                 lastName={currentUser?.lastname}
                 alias1={currentUser?.alias_1}
                 alias2={currentUser?.alias_2}
-                team={currentUser?.team}
                 currentUser={currentUser}
                 onLogout={handleLogout}
               />

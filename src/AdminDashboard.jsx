@@ -853,7 +853,6 @@ function AdminDashboard({ currentUser, onLogout }) {
                       <span className="user-info">
                         <strong>{user.firstname} {user.lastname}</strong>
                         <span className="user-codename">{user.alias_1} {user.alias_2}</span>
-                        <span className={`user-team team-${user.team}`}>{user.team}</span>
                       </span>
                     </label>
                   ))}
@@ -933,7 +932,6 @@ function AdminDashboard({ currentUser, onLogout }) {
                       <span className="user-info">
                         <strong>{user.firstname} {user.lastname}</strong>
                         <span className="user-codename">{user.alias_1} {user.alias_2}</span>
-                        <span className={`user-team team-${user.team}`}>{user.team}</span>
                       </span>
                     </label>
                   ))}

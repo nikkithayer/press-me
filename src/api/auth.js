@@ -22,7 +22,7 @@ export async function validateAlias(alias) {
   try {
     // Check for alias_1 followed by alias_2 with space, underscore, or no separator (case-insensitive)
     const userResult = await sql`
-      SELECT id, firstname, lastname, team, alias_1, alias_2, passphrase, is_admin
+      SELECT id, firstname, lastname, alias_1, alias_2, passphrase, is_admin
       FROM users 
       WHERE (
         LOWER(alias_1 || ' ' || alias_2) = LOWER(${alias})
@@ -64,7 +64,7 @@ export async function authenticate(alias, passphrase, ipAddress, userAgent) {
   try {
     // Check for alias_1 followed by alias_2 with space, underscore, or no separator (case-insensitive)
     const userResult = await sql`
-      SELECT id, firstname, lastname, team, alias_1, alias_2, passphrase, is_admin
+      SELECT id, firstname, lastname, alias_1, alias_2, passphrase, is_admin
       FROM users 
       WHERE (
         LOWER(alias_1 || ' ' || alias_2) = LOWER(${alias})
@@ -104,7 +104,6 @@ export async function authenticate(alias, passphrase, ipAddress, userAgent) {
           id: user.id,
           firstname: user.firstname,
           lastname: user.lastname,
-          team: user.team,
           alias_1: user.alias_1,
           alias_2: user.alias_2,
           codename: `${user.alias_1} ${user.alias_2}`,
@@ -139,7 +138,7 @@ export async function validateAdminName(name) {
     
     // Check for firstname and lastname (case-insensitive) and ensure user is admin
     const userResult = await sql`
-      SELECT id, firstname, lastname, team, alias_1, alias_2, passphrase, is_admin
+      SELECT id, firstname, lastname, alias_1, alias_2, passphrase, is_admin
       FROM users 
       WHERE LOWER(firstname) = LOWER(${firstname})
         AND LOWER(lastname) = LOWER(${lastname})
@@ -192,7 +191,7 @@ export async function authenticateAdmin(name, passphrase, ipAddress, userAgent) 
     
     // Check for firstname and lastname (case-insensitive) and ensure user is admin
     const userResult = await sql`
-      SELECT id, firstname, lastname, team, alias_1, alias_2, passphrase, is_admin
+      SELECT id, firstname, lastname, alias_1, alias_2, passphrase, is_admin
       FROM users 
       WHERE LOWER(firstname) = LOWER(${firstname})
         AND LOWER(lastname) = LOWER(${lastname})
@@ -231,7 +230,6 @@ export async function authenticateAdmin(name, passphrase, ipAddress, userAgent) 
           id: user.id,
           firstname: user.firstname,
           lastname: user.lastname,
-          team: user.team,
           alias_1: user.alias_1,
           alias_2: user.alias_2,
           codename: `${user.alias_1} ${user.alias_2}`,

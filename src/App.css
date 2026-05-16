@@ -77,35 +77,10 @@
 
 /* MISSION */
 
-.mission-container .team-red{
-  color: var(--red);
-}
-
-.mission-container .bg-red, .mission-container.bg-red{
-  background-color: var(--red);
-}
-
-.mission-container .team-blue{
-  color: var(--blue);
-}
-
-.mission-container .bg-blue, .mission-container.bg-blue{
-  background-color: var(--blue);
-}
-
 .mission-container .agent-header{
   padding: var(--unit-base);
   height: 35vh;
   width: 100%;
-}
-
-.mission-container.bg-red .agent-header{
-  background-image: linear-gradient(170deg, var(--black) 70%, var(--red) calc(70% + 2px));
-}
-
-.mission-container.bg-blue .agent-header{
-  padding: var(--unit-base);
-  background-image: linear-gradient(170deg, var(--black) 70%, var(--blue) calc(70% + 2px));
 }
 
 .mission-container .agent-header button{
@@ -263,14 +238,6 @@
     gap: 4px;
     text-transform: uppercase;
     justify-content: center;
-  }
-
-  .bg-red .rotate span{
-    color: var(--red);
-  }
-
-  .bg-blue .rotate span{
-    color: var(--blue);
   }
 
   .rotate span{
@@ -729,16 +696,6 @@
   background-color: var(--black);
   transition: all 0.2s;
   border: 1px solid var(--green);
-}
-
-.field-row.visible.team-red > span {
-  background-color: var(--red);
-  border: 1px solid var(--red);
-}
-
-.field-row.visible.team-blue > span {
-  background-color: var(--blue);
-  border: 1px solid var(--blue);
 }
 
 .toggle-button {
@@ -1222,74 +1179,6 @@
 }
 
 
-.team-red{
-  color: var(--red);
-}
-
-.team-blue{
-  color: var(--blue);
-}
-
-.team-selector{
-  display: flex;
-  gap: var(--unit-xs);
-  align-items: left;
-  flex-direction: column;
-}
-
-.team-selector:first-child{
-  margin-left: var(--unit-xs);
-}
-
-.radio-label{
-  position: relative;
-  cursor: pointer;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--unit-sm);
-}
-
-.radio-content{
-  position: relative;
-}
-
-.team-icon{
-  width: 20px;
-  height: 20px;
-  display: block;
-}
-
-.circle-icon{
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 35px;
-  height: 35px;
-  pointer-events: none;
-}
-
-.team-label{
-  font-size: 0.7em;
-  color: var(--black);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  white-space: normal;
-  word-wrap: break-word;
-}
-
-.team-label.team-red {
-  color: var(--red);
-}
-
-.team-label.team-blue {
-  color: var(--blue);
-}
-
-.team-label.team-unknown {
-  color: var(--brown);
-}
 
 .alias-section{
   position: fixed;
@@ -1931,26 +1820,6 @@ body:has(.admin-dashboard) {
   color: var(--black);
   opacity: 0.8;
   font-style: italic;
-}
-
-.user-team {
-  display: inline-block;
-  padding: 2px var(--unit-xs);
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  width: fit-content;
-}
-
-.user-team.team-red {
-  background-color: var(--red);
-  color: var(--white);
-}
-
-.user-team.team-blue {
-  background-color: var(--blue);
-  color: var(--white);
 }
 
 .admin-modal-footer {

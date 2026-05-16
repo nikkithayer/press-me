@@ -2,13 +2,10 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { addBounce } from './helpers.js'
 
-function Mission({ alias1, alias2, realName, team, onLogout }) {
+function Mission({ alias1, alias2, realName, onLogout }) {
   const navigate = useNavigate()
   const effectRef1 = useRef(null)
   const effectRef2 = useRef(null)
-  const teamColor = "team-"+{team}.team
-  const bgColor = "bg-"+{team}.team
-  
 
   const handleLogout = () => {
     onLogout()
@@ -26,10 +23,10 @@ function Mission({ alias1, alias2, realName, team, onLogout }) {
 
 
   return (
-    <div className={"mission-container " + (bgColor)}>
+    <div className="mission-container">
       <div className="mission-header">
         <div className="agent-header">
-        <p>Welcome to the <span className={teamColor}>{team} team</span>, <span className={bgColor}>{realName}</span>... or should I say</p>
+        <p>Welcome, <span>{realName}</span>... or should I say</p>
         </div>
 
         <div className="agent-intro">

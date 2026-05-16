@@ -3,7 +3,6 @@
 
 // Import from all modules
 import * as users from './api/users.js';
-import * as teams from './api/teams.js';
 import * as auth from './api/auth.js';
 import * as sessions from './api/sessions.js';
 import * as phaseMissions from './api/phaseMissions.js';
@@ -13,10 +12,6 @@ export const neonApi = {
   // Users
   getUsers: users.getUsers,
   getUserScore: users.getUserScore,
-  
-  // Teams
-  getTeamPoints: teams.getTeamPoints,
-  updateTeamPoints: teams.updateTeamPoints,
   
   // Auth
   logLogin: auth.logLogin,
