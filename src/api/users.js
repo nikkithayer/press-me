@@ -3,7 +3,7 @@ import { sql } from './db.js';
 // Get all users
 export async function getUsers() {
   try {
-    const result = await sql`SELECT id, firstname, lastname, alias_1, alias_2, ishere, is_admin FROM users ORDER BY firstname`;
+    const result = await sql`SELECT id, firstname, lastname, alias_1, alias_2, passphrase, ishere, is_admin FROM users ORDER BY firstname`;
     return result;
   } catch (error) {
     console.error('Error fetching users:', error);

@@ -26,7 +26,7 @@ body:has(.admin-dashboard) {
 
 .admin-header {
   background-color: var(--white);
-  padding: var(--unit-base);
+  padding: var(--unit-sm) var(--unit-sm);
   border-bottom: 4px solid var(--black);
   display: flex;
   justify-content: space-between;
@@ -43,7 +43,7 @@ body:has(.admin-dashboard) {
 
 .admin-header h1 {
   font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 2rem;
+  font-size: 1.4rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 2px;
@@ -90,7 +90,7 @@ body:has(.admin-dashboard) {
 
 .admin-content {
   flex: 1;
-  padding: var(--unit-base);
+  padding: var(--unit-sm);
   background-color: var(--yellow);
   border-left: 4px solid var(--black);
   border-right: 4px solid var(--black);
@@ -104,9 +104,9 @@ body:has(.admin-dashboard) {
 
 .admin-section {
   background-color: var(--white);
-  padding: var(--unit-base);
-  margin-bottom: var(--unit-base);
-  border: 4px solid var(--black);
+  padding: var(--unit-sm);
+  margin-bottom: var(--unit-sm);
+  border: 2px solid var(--black);
   width: 100%;
   box-sizing: border-box;
   overflow: visible;
@@ -114,22 +114,22 @@ body:has(.admin-dashboard) {
 
 .admin-section h2 {
   font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 1.75rem;
+  font-size: 1.2rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   color: var(--black);
-  margin: 0 0 var(--unit-base) 0;
-  border-bottom: 2px solid var(--black);
-  padding-bottom: var(--unit-sm);
+  margin: 0 0 var(--unit-sm) 0;
+  border-bottom: 1px solid var(--black);
+  padding-bottom: var(--unit-xs);
 }
 
 .admin-section p {
   font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   color: var(--black);
-  line-height: 1.5;
-  margin: var(--unit-sm) 0;
+  line-height: 1.4;
+  margin: var(--unit-xs) 0;
 }
 
 .session-controls {
@@ -144,9 +144,9 @@ body:has(.admin-dashboard) {
   background-color: var(--white);
   color: var(--black);
   border: 2px solid var(--black);
-  padding: var(--unit-sm) var(--unit-base);
+  padding: var(--unit-xs) var(--unit-sm);
   font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -171,6 +171,11 @@ body:has(.admin-dashboard) {
 
 .button-secondary:hover {
   opacity: 0.9;
+}
+
+.button-secondary.active {
+  background-color: var(--black);
+  color: var(--white);
 }
 
 .sessions-list {
@@ -204,12 +209,12 @@ body:has(.admin-dashboard) {
 
 .session-item h3 {
   font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--black);
-  margin: 0 0 var(--unit-sm) 0;
+  margin: 0 0 var(--unit-xs) 0;
 }
 
 .session-item p {
@@ -342,10 +347,10 @@ body:has(.admin-dashboard) {
 
 .admin-modal-header h2 {
   font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 1.75rem;
+  font-size: 1.2rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   color: var(--black);
   margin: 0;
 }
@@ -619,4 +624,287 @@ body:has(.admin-dashboard) {
 .admin-login-container .admin-login-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Admin Tabs */
+.admin-tabs {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  border-left: 4px solid var(--black);
+  border-right: 4px solid var(--black);
+  background-color: var(--black);
+  gap: 2px;
+  padding-top: var(--unit-xs);
+}
+
+.admin-tab {
+  flex: 1;
+  border: none;
+  border-radius: 4px 4px 0 0;
+  padding: var(--unit-xs) 0;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  background-color: var(--brown);
+  color: var(--black);
+  opacity: 0.7;
+}
+
+.admin-tab:hover {
+  opacity: 0.85;
+}
+
+.admin-tab.active {
+  background-color: var(--yellow);
+  color: var(--black);
+  opacity: 1;
+  font-weight: 700;
+}
+
+/* Shared utilities */
+.admin-section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--unit-sm);
+  margin-bottom: var(--unit-sm);
+}
+
+.admin-section-header-row h2 {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.admin-placeholder {
+  text-align: center;
+  padding: var(--unit-base);
+}
+
+.admin-empty-message {
+  text-align: center;
+  padding: var(--unit-base);
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* Participant cards (active session view) */
+.participant-card {
+  margin-bottom: var(--unit-sm);
+  padding: var(--unit-xs) 0;
+  border-bottom: 1px solid var(--black);
+}
+
+.participant-card:last-child {
+  border-bottom: none;
+}
+
+.participant-header {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-weight: 700;
+  font-size: 1.05em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.participant-passphrase {
+  font-family: 'Jost', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.8em;
+  color: #888;
+  margin-bottom: 2px;
+}
+
+.participant-phase {
+  margin-bottom: 2px;
+}
+
+.phase-label {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.7em;
+  font-weight: 600;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 3px;
+}
+
+.phase-label.locked {
+  color: #ccc;
+}
+
+.phase-missions {
+  display: flex;
+  flex-direction: column;
+}
+
+.phase-mission-row {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.9em;
+  padding: 1px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.phase-mission-row.completed {
+  color: #999;
+}
+
+.phase-mission-row.locked {
+  opacity: 0.4;
+}
+
+.phase-mission-row strong {
+  font-weight: 500;
+}
+
+.mission-variable {
+  color: #666;
+  margin-left: 6px;
+  font-size: 0.85em;
+}
+
+.mission-type {
+  color: #999;
+  margin-left: 6px;
+  font-size: 0.8em;
+}
+
+.mission-done {
+  color: green;
+  margin-left: 8px;
+  font-size: 0.85em;
+}
+
+.button-complete {
+  padding: 3px 8px;
+  font-size: 0.8em;
+  cursor: pointer;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  text-transform: uppercase;
+}
+
+.button-icon {
+  background-color: var(--white);
+  color: var(--black);
+  border: 2px solid var(--black);
+  border-radius: 4px;
+  padding: var(--unit-xs);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.button-icon:hover {
+  background-color: var(--yellow);
+}
+
+/* Missions tab - inline list */
+.mission-phase-group {
+  margin-bottom: var(--unit-base);
+}
+
+.mission-phase-group h3 {
+  margin: 0 0 var(--unit-sm) 0;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.2rem;
+  text-transform: uppercase;
+}
+
+.mission-list-item {
+  padding: var(--unit-sm);
+  margin-bottom: 4px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mission-list-item-info {
+  flex: 1;
+}
+
+.mission-meta {
+  color: #999;
+  margin-left: var(--unit-sm);
+  font-size: 0.85em;
+}
+
+.mission-body-preview {
+  font-size: 0.85em;
+  color: #666;
+  margin-top: 2px;
+}
+
+.mission-list-item-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: var(--unit-sm);
+  flex-shrink: 0;
+}
+
+/* Users tab - table */
+.users-table-wrapper {
+  overflow-x: auto;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1rem;
+}
+
+.users-table th,
+.users-table td {
+  text-align: left;
+  padding: var(--unit-sm) var(--unit-sm);
+  border-bottom: 1px solid var(--black);
+}
+
+.users-table th {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 0.9rem;
+  color: var(--black);
+}
+
+.users-table tbody tr:hover {
+  background-color: var(--yellow);
+}
+
+.user-status-badge {
+  display: inline-block;
+  padding: 2px var(--unit-xs);
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.user-status-badge.here {
+  background-color: var(--green);
+  color: var(--black);
+}
+
+.user-status-badge.away {
+  background-color: var(--brown);
+  color: var(--black);
 }
