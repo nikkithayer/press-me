@@ -772,7 +772,7 @@ function AdminDashboard({ currentUser, onLogout }) {
                         </div>
                         <span className="mission-meta">
                           <span className="mission-tag tag-completion">{m.completion_type}</span>
-                          {m.bounty ? <span className="mission-tag tag-bounty">{m.bounty}pts</span> : null}
+                          {m.bounty ? <span className="mission-tag tag-bounty">{`$${m.bounty}`}</span> : null}
                           {m.signer_constraint && m.signer_constraint !== 'any' ? <span className="mission-tag tag-constraint">{m.signer_constraint.replace(/_/g, ' ')}</span> : null}
                           {m.variable_pool ? <span className="mission-tag tag-variable">variables</span> : null}
                           {m.variable_source === 'participants' ? <span className="mission-tag tag-variable">player var</span> : null}
@@ -1183,7 +1183,7 @@ function AdminDashboard({ currentUser, onLogout }) {
                 </div>
               )}
               <div className="admin-form-group">
-                <label>Bounty (points awarded on completion)</label>
+                <label>Bounty (dollars awarded on completion)</label>
                 <input
                   type="number"
                   min="0"

@@ -1,9 +1,22 @@
 import React from 'react'
 
-function MissionsTab({ isInActiveSession, missions, currentPhase, completedMissions, onMissionClick }) {
+export function BriefingMissionRow({ onOpenBriefing }) {
+  return (
+    <button
+      type="button"
+      className="mission-card mission-card--completed clickable mission-card--briefing"
+      onClick={onOpenBriefing}
+    >
+      <h3>Briefing</h3>
+    </button>
+  )
+}
+
+function MissionsTab({ isInActiveSession, missions, currentPhase, completedMissions, onMissionClick, onOpenBriefing }) {
   if (!isInActiveSession) {
     return (
       <div className="tab-content">
+        <BriefingMissionRow onOpenBriefing={onOpenBriefing} />
         <div className="no-session-message">
           <h2>THE PARTY HASN'T STARTED YET</h2>
           <p>Wait for the host to start a session. Once a session is active, your missions will appear here.</p>
@@ -14,6 +27,7 @@ function MissionsTab({ isInActiveSession, missions, currentPhase, completedMissi
 
   return (
     <div className="tab-content">
+      <BriefingMissionRow onOpenBriefing={onOpenBriefing} />
       {[0, 1, 2, 3].map(phase => {
         const phaseMissions = missions.filter(m => Number(m.phase) === phase)
         if (phaseMissions.length === 0) return null
@@ -27,7 +41,7 @@ function MissionsTab({ isInActiveSession, missions, currentPhase, completedMissi
         const showCompactRow = lockedIncomplete.length > 0 || compactCompleted.length > 0
 
         return (
-          <div key={phase} style={{ marginBottom: '16px' }}>
+          <div key={phase} className="missions-phase">
             {fullCardMissions.length > 0 && (
               <div className="missions-grid">
                 {fullCardMissions.map(mission => (
@@ -39,7 +53,7 @@ function MissionsTab({ isInActiveSession, missions, currentPhase, completedMissi
                     <div className="mission-header">
                       <h3>{mission.title}</h3>
                       {mission.bounty > 0 && (
-                        <span style={{ fontSize: '0.75em', color: '#b8860b', fontWeight: 'bold' }}>{mission.bounty}pts</span>
+                        <span style={{ fontSize: '0.75em', color: 'var(--green)', fontWeight: 'bold' }}>{`$${mission.bounty}`}</span>
                       )}
                     </div>
                     <p style={{ whiteSpace: 'pre-line' }}>{mission.missionBody}</p>

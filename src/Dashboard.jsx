@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { neonApi } from './neonApi'
 import { isAdmin } from './utils/admin.js'
 import AgentTab from './AgentTab'
-import MissionsTab from './MissionsTab'
+import MissionsTab, { BriefingMissionRow } from './MissionsTab'
 
 function renderSignoffMadlibPreview(template, firstName, lastName, variableValue) {
   const playerName = [firstName, lastName].filter(Boolean).join(' ').trim()
@@ -87,18 +87,6 @@ function DashboardFooter({ currentUser, onLogout }) {
         <button type="button" className="logout-button button-min" onClick={onLogout}>LOGOUT</button>
       </div>
     </footer>
-  )
-}
-
-function BriefingStrip({ onOpenBriefing }) {
-  return (
-    <div className="dashboard-briefing-strip">
-      <div className="tab-content dashboard-briefing-inner">
-        <button type="button" className="briefing-strip-card" onClick={onOpenBriefing}>
-          <span className="briefing-strip-label">Briefing</span>
-        </button>
-      </div>
-    </div>
   )
 }
 
@@ -441,6 +429,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
             <div className="dashboard-missions-heading">MISSIONS</div>
             <div className="dashboard-content dashboard-content-missions">
               <div className="tab-content">
+                <BriefingMissionRow onOpenBriefing={openBriefingModal} />
                 <div className="loading-spinner">
                   <div className="spinner"></div>
                   <p>LOADING MISSION DATA...</p>
@@ -448,7 +437,6 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
               </div>
             </div>
           </div>
-          <BriefingStrip onOpenBriefing={openBriefingModal} />
           <DashboardFooter currentUser={currentUser} onLogout={onLogout} />
         </div>
         {showBriefingModal && (
@@ -468,6 +456,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
             <div className="dashboard-missions-heading">MISSIONS</div>
             <div className="dashboard-content dashboard-content-missions">
               <div className="tab-content">
+                <BriefingMissionRow onOpenBriefing={openBriefingModal} />
                 <h1>ERROR</h1>
                 <p>{error}</p>
                 <div className="tab-actions">
@@ -476,7 +465,6 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
               </div>
             </div>
           </div>
-          <BriefingStrip onOpenBriefing={openBriefingModal} />
           <DashboardFooter currentUser={currentUser} onLogout={onLogout} />
         </div>
         {showBriefingModal && (
@@ -509,10 +497,10 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
               currentPhase={currentPhase}
               completedMissions={completedMissions}
               onMissionClick={openMissionModal}
+              onOpenBriefing={openBriefingModal}
             />
           </div>
         </div>
-        <BriefingStrip onOpenBriefing={openBriefingModal} />
         <DashboardFooter currentUser={currentUser} onLogout={onLogout} />
       </div>
 
