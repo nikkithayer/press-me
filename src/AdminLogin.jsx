@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { neonApi } from './neonApi'
+import './AdminDashboard.css'
 
 function AdminLogin({ onLogin }) {
   const { name: urlName } = useParams()

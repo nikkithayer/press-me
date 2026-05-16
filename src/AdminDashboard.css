@@ -1,0 +1,622 @@
+@import './colors.css';
+
+/* ADMIN DASHBOARD STYLES */
+body:has(.admin-dashboard) {
+  display: block !important;
+  height: auto !important;
+  min-height: 100vh;
+  place-items: unset !important;
+}
+
+#root:has(.admin-dashboard) {
+  width: 100%;
+  height: auto;
+  min-height: 100vh;
+}
+
+.admin-dashboard {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--black);
+  position: relative;
+  width: 100%;
+  align-self: flex-start;
+}
+
+.admin-header {
+  background-color: var(--white);
+  padding: var(--unit-base);
+  border-bottom: 4px solid var(--black);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--unit-sm);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.admin-header h1 {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--black);
+  margin: 0;
+}
+
+.admin-actions {
+  display: flex;
+  gap: var(--unit-sm);
+  flex-wrap: wrap;
+}
+
+.admin-actions .back-button,
+.admin-actions .logout-button {
+  background-color: var(--white);
+  color: var(--black);
+  border: 2px solid var(--black);
+  padding: var(--unit-xs) var(--unit-sm);
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+}
+
+.admin-actions .back-button:hover,
+.admin-actions .logout-button:hover {
+  background-color: var(--yellow);
+}
+
+.admin-actions .logout-button {
+  background-color: var(--red);
+  color: var(--white);
+}
+
+.admin-actions .logout-button:hover {
+  background-color: var(--red);
+  opacity: 0.9;
+}
+
+.admin-content {
+  flex: 1;
+  padding: var(--unit-base);
+  background-color: var(--yellow);
+  border-left: 4px solid var(--black);
+  border-right: 4px solid var(--black);
+  border-bottom: 4px solid var(--black);
+  overflow-y: visible;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: calc(100vh - 100px);
+}
+
+.admin-section {
+  background-color: var(--white);
+  padding: var(--unit-base);
+  margin-bottom: var(--unit-base);
+  border: 4px solid var(--black);
+  width: 100%;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.admin-section h2 {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--black);
+  margin: 0 0 var(--unit-base) 0;
+  border-bottom: 2px solid var(--black);
+  padding-bottom: var(--unit-sm);
+}
+
+.admin-section p {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.1rem;
+  color: var(--black);
+  line-height: 1.5;
+  margin: var(--unit-sm) 0;
+}
+
+.session-controls {
+  display: flex;
+  gap: var(--unit-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--unit-base);
+}
+
+.button-primary,
+.button-secondary {
+  background-color: var(--white);
+  color: var(--black);
+  border: 2px solid var(--black);
+  padding: var(--unit-sm) var(--unit-base);
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+}
+
+.button-primary {
+  background-color: var(--blue);
+  color: var(--white);
+}
+
+.button-primary:hover {
+  opacity: 0.9;
+}
+
+.button-secondary {
+  background-color: var(--green);
+  color: var(--black);
+}
+
+.button-secondary:hover {
+  opacity: 0.9;
+}
+
+.sessions-list {
+  margin-top: var(--unit-base);
+}
+
+.sessions-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--unit-sm);
+}
+
+.sessions-list li {
+  margin: 0;
+}
+
+.session-item {
+  background-color: var(--white);
+  border: 2px solid var(--black);
+  padding: var(--unit-base);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.session-item:hover {
+  background-color: #f5f0e5;
+}
+
+.session-item h3 {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--black);
+  margin: 0 0 var(--unit-sm) 0;
+}
+
+.session-item p {
+  font-family: 'Jost', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.9rem;
+  color: var(--black);
+  margin: 0 0 var(--unit-sm) 0;
+  opacity: 0.8;
+}
+
+.session-item button {
+  background-color: var(--red);
+  color: var(--white);
+  border: 2px solid var(--black);
+  padding: var(--unit-xs) var(--unit-sm);
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+  margin-top: var(--unit-sm);
+}
+
+.session-item button:hover {
+  opacity: 0.9;
+}
+
+.session-details {
+  margin-top: var(--unit-base);
+  padding-top: var(--unit-base);
+  border-top: 2px solid var(--black);
+}
+
+.session-info {
+  margin-bottom: var(--unit-sm);
+}
+
+.session-info p {
+  margin: var(--unit-xs) 0;
+  font-size: 0.9rem;
+}
+
+.session-status {
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 2px var(--unit-xs);
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.session-status.status-draft {
+  background-color: var(--brown);
+  color: var(--black);
+}
+
+.session-status.status-active {
+  background-color: var(--green);
+  color: var(--black);
+}
+
+.session-status.status-paused {
+  background-color: var(--yellow);
+  color: var(--black);
+}
+
+.session-status.status-ended {
+  background-color: var(--black);
+  color: var(--white);
+}
+
+.session-actions {
+  display: flex;
+  gap: var(--unit-sm);
+  flex-wrap: wrap;
+  margin-top: var(--unit-sm);
+}
+
+.session-ended {
+  font-style: italic;
+  opacity: 0.7;
+  margin: 0;
+}
+
+.admin-button {
+  color: var(--black);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+}
+
+/* Admin Modal Styles */
+.admin-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: var(--unit-base);
+  box-sizing: border-box;
+}
+
+.admin-modal-content {
+  background-color: var(--white);
+  border: 4px solid var(--black);
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-modal-header {
+  background-color: var(--yellow);
+  padding: var(--unit-base);
+  border-bottom: 4px solid var(--black);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-modal-header h2 {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--black);
+  margin: 0;
+}
+
+.admin-modal-close {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--black);
+  cursor: pointer;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+}
+
+.admin-modal-close:hover:not(:disabled) {
+  background-color: var(--black);
+  color: var(--yellow);
+}
+
+.admin-modal-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-modal-body {
+  padding: var(--unit-base);
+  flex: 1;
+  overflow-y: auto;
+}
+
+.admin-form-group {
+  margin-bottom: var(--unit-base);
+}
+
+.admin-form-group label {
+  display: block;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--black);
+  margin-bottom: var(--unit-sm);
+}
+
+.admin-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--unit-sm);
+}
+
+.select-all-button {
+  background-color: var(--green);
+  color: var(--black);
+  border: 2px solid var(--black);
+  padding: var(--unit-xs) var(--unit-sm);
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+}
+
+.select-all-button:hover:not(:disabled) {
+  background-color: var(--black);
+  color: var(--green);
+}
+
+.select-all-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.users-selection-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 2px solid var(--black);
+  border-radius: 4px;
+  padding: var(--unit-sm);
+  background-color: var(--white);
+}
+
+.user-selection-item {
+  display: flex;
+  align-items: center;
+  padding: var(--unit-sm);
+  margin-bottom: var(--unit-xs);
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.user-selection-item:hover {
+  background-color: var(--yellow);
+  border-color: var(--black);
+}
+
+.user-selection-item input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-right: var(--unit-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--unit-xs);
+  flex: 1;
+}
+
+.user-info strong {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.1rem;
+  color: var(--black);
+  text-transform: uppercase;
+}
+
+.user-codename {
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.9rem;
+  color: var(--black);
+  opacity: 0.8;
+  font-style: italic;
+}
+
+.admin-modal-footer {
+  padding: var(--unit-base);
+  border-top: 4px solid var(--black);
+  background-color: var(--white);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--unit-sm);
+}
+
+.admin-modal-footer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ADMIN LOGIN */
+.admin-login-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--black);
+}
+
+.admin-login-container .admin-logo {
+  background-color: var(--white);
+  padding: var(--unit-base);
+  box-sizing: border-box;
+  width: 100%;
+  height: inherit;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-bottom: 4px solid var(--black);
+}
+
+.admin-login-container .admin-logo h1 {
+  color: var(--black);
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 2.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  margin: 0 0 var(--unit-sm) 0;
+}
+
+.admin-login-container .admin-logo p {
+  color: var(--black);
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.2rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin: 0;
+  opacity: 0.7;
+}
+
+.admin-login-container .admin-error-message {
+  color: var(--red);
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.2rem;
+  text-align: center;
+  margin-top: var(--unit-base);
+  padding: var(--unit-base);
+  border: 2px solid var(--red);
+  background-color: rgba(255, 0, 0, 0.1);
+}
+
+.admin-login-container .admin-login-form {
+  background-color: var(--yellow);
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  position: relative;
+  padding: var(--unit-base);
+  width: 100%;
+  border-top: 4px solid var(--black);
+}
+
+.admin-login-container .form-group label {
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+  font-size: 1.33rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--black);
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+.admin-login-container input {
+  color: var(--black);
+  border: 2px solid var(--black);
+  padding: var(--unit-xs);
+  font-size: 1rem;
+}
+
+.admin-login-container input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.admin-login-container input::placeholder {
+  font-style: normal;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.admin-login-container .helper-error {
+  margin-top: var(--unit-sm);
+  color: var(--red);
+  font-weight: 600;
+}
+
+.admin-login-container .admin-login-button {
+  margin-top: var(--unit-base);
+  background-color: var(--black);
+  color: var(--white);
+  border: 2px solid var(--black);
+  padding: var(--unit-sm) var(--unit-base);
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.admin-login-container .admin-login-button:hover:not(:disabled) {
+  background-color: var(--red);
+}
+
+.admin-login-container .admin-login-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

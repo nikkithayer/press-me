@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { neonApi } from './neonApi'
 import { isAdmin } from './utils/admin.js'
+import './AdminDashboard.css'
 
 const PRODUCTION_URL = 'https://press-me-iota.vercel.app'
 
