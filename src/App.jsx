@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
 import './helpers.js'
@@ -10,17 +10,9 @@ import AdminLogin from './AdminLogin'
 import { isAdmin } from './utils/admin.js'
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [currentUser, setCurrentUser] = useState(null)
-
-  // Check if user is logged in on app start
-  useEffect(() => {
-    const loggedInUser = localStorage.getItem('spyUser')
-    if (loggedInUser) {
-      setCurrentUser(JSON.parse(loggedInUser))
-      setIsLoggedIn(true)
-    }
-  }, [])
+  const savedUser = localStorage.getItem('spyUser')
+  const [isLoggedIn, setIsLoggedIn] = useState(!!savedUser)
+  const [currentUser, setCurrentUser] = useState(savedUser ? JSON.parse(savedUser) : null)
 
   const handleLogin = (userData) => {
     setCurrentUser(userData)
