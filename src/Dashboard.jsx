@@ -14,9 +14,8 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
 
   const [activeSessionId, setActiveSessionId] = useState(null)
   const [currentPhase, setCurrentPhase] = useState(0)
-  const [sessionParticipants, setSessionParticipants] = useState([])
-  const [signerUserId, setSignerUserId] = useState('')
   const [signerPassphrase, setSignerPassphrase] = useState('')
+  const [signoffSuccessSignerName, setSignoffSuccessSignerName] = useState(null)
 
   const [showMissionModal, setShowMissionModal] = useState(false)
   const [isMissionClosing, setIsMissionClosing] = useState(false)
@@ -43,10 +42,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
           setActiveSessionId(activeSession.id)
           setCurrentPhase(activeSession.current_phase || 0)
 
-          if (userInSession) {
-            const participants = await neonApi.getSessionParticipants(activeSession.id)
-            setSessionParticipants(participants.filter(p => p.id !== agentIdNum))
-          } else {
+          if (!userInSession) {
             setMissions([])
             setLoading(false)
           }
@@ -171,6 +167,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     setMissionErrors(prev => ({ ...prev, [missionId]: '' }))
     setMissionFailedMessage(null)
     setCompletedBounty(0)
+    setSignoffSuccessSignerName(null)
 
     const mission = missions.find(m => m.playerMissionId === missionId)
     if (mission && mission.completed && !mission.bountyPaid && mission.bounty > 0) {
@@ -189,6 +186,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
       setShowMissionFailed(false)
       setMissionFailedMessage(null)
       setCompletedBounty(0)
+      setSignoffSuccessSignerName(null)
     }, 300)
   }
 
@@ -221,17 +219,19 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
         if (!answer) return
         result = await neonApi.completePhaseMission(playerMissionId, answer, agentId)
       } else if (mission.completionType === 'signoff') {
-        if (!signerUserId || !signerPassphrase) {
-          setMissionErrors(prev => ({ ...prev, [playerMissionId]: 'Select a signer and enter their passphrase' }))
+        if (!signerPassphrase) {
+          setMissionErrors(prev => ({ ...prev, [playerMissionId]: 'The person signing off must enter their passphrase' }))
           return
         }
-        result = await neonApi.signOffMission(playerMissionId, parseInt(signerUserId), signerPassphrase)
+        result = await neonApi.signOffMission(playerMissionId, signerPassphrase)
       }
 
       setCompletedMissions(prev => new Set([...prev, playerMissionId]))
       setSuccessKeys(prev => { const n = { ...prev }; delete n[playerMissionId]; return n })
-      setSignerUserId('')
       setSignerPassphrase('')
+      if (mission.completionType === 'signoff' && result.signerName) {
+        setSignoffSuccessSignerName(result.signerName)
+      }
 
       if (result.bounty > 0) setCompletedBounty(result.bounty)
       if (selectedMissionId === playerMissionId) {
@@ -402,23 +402,13 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                       </p>
                     )}
 
-                    <div className="field-group">
-                      <label htmlFor="signer-select">Who is signing off?</label>
-                      <select
-                        id="signer-select"
-                        value={signerUserId}
-                        onChange={(e) => setSignerUserId(e.target.value)}
-                        style={{ width: '100%', padding: '8px', fontSize: '1em' }}
-                      >
-                        <option value="">-- Select a player --</option>
-                        {sessionParticipants.map(p => (
-                          <option key={p.id} value={p.id}>{p.firstname} {p.lastname}</option>
-                        ))}
-                      </select>
-                    </div>
+                    <p style={{ fontSize: '0.85em', color: '#888', marginBottom: '8px' }}>
+                      Hand your phone to the person confirming this mission. They enter their passphrase below
+                      (full phrase or last word).
+                    </p>
 
                     <div className="field-group">
-                      <label htmlFor="signer-passphrase">Their passphrase</label>
+                      <label htmlFor="signer-passphrase">Passphrase</label>
                       <div className="input-with-clear">
                         <input
                           id="signer-passphrase"
@@ -426,11 +416,11 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                           value={signerPassphrase}
                           onChange={(e) => setSignerPassphrase(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter' && signerUserId && signerPassphrase) {
+                            if (e.key === 'Enter' && signerPassphrase) {
                               handleSubmitMission(selectedMissionId)
                             }
                           }}
-                          placeholder="Enter their passphrase..."
+                          placeholder="Signer enters passphrase…"
                         />
                       </div>
                     </div>
@@ -447,7 +437,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                   disabled={
                     selectedMission.completionType === 'phrase'
                       ? !successKeys[selectedMissionId]
-                      : !signerUserId || !signerPassphrase
+                      : !signerPassphrase
                   }
                   className="save-button"
                 >
@@ -481,6 +471,11 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                 <div className="mission-success">
                   <p>Mission success</p>
                   <h2>{selectedMission.title}</h2>
+                  {selectedMission.completionType === 'signoff' && (signoffSuccessSignerName || selectedMission.signerName) && (
+                    <p style={{ marginTop: '8px' }}>
+                      Signed off by {signoffSuccessSignerName || selectedMission.signerName}.
+                    </p>
+                  )}
                   {completedBounty > 0 && (
                     <div className="bounty-award">
                       <p className="bounty-award-text">BONUS AWARDED: {completedBounty} pts</p>

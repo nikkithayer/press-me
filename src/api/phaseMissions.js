@@ -320,12 +320,20 @@ export async function completePhaseMission(playerMissionId, answer, userId) {
 const normalizePassphrase = (phrase) =>
   phrase.toLowerCase().trim().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ');
 
-export async function signOffMission(playerMissionId, signerUserId, signerPassphrase) {
+function passphraseMatchesStored(storedRaw, enteredNormalized) {
+  const stored = normalizePassphrase(storedRaw || '');
+  if (!stored || !enteredNormalized) return false;
+  const words = stored.split(/\s+/).filter(Boolean);
+  const lastWord = words[words.length - 1];
+  return enteredNormalized === stored || enteredNormalized === lastWord;
+}
+
+export async function signOffMission(playerMissionId, signerPassphrase) {
   try {
     const rows = await sql`
       SELECT pm.*, ph.completion_type, ph.phase, ph.signer_constraint,
              ph.same_signer_mission_id, ph.title, ph.bounty,
-             s.current_phase, s.id as session_id
+             s.current_phase, s.id as session_id, s.participant_user_ids
       FROM player_missions pm
       JOIN phase_missions ph ON pm.mission_id = ph.id
       JOIN sessions s ON pm.session_id = s.id
@@ -338,22 +346,35 @@ export async function signOffMission(playerMissionId, signerUserId, signerPassph
     if (mission.completed) throw new Error('Mission already completed');
     if (mission.completion_type !== 'signoff') throw new Error('This mission requires a phrase answer, not a sign-off');
     if (mission.phase < mission.current_phase) throw new Error('This phase is locked');
-    if (signerUserId === mission.user_id) throw new Error('You cannot sign off on your own mission');
 
-    // Authenticate the signer
-    const signerResult = await sql`
-      SELECT id, passphrase, is_admin FROM users WHERE id = ${signerUserId} AND ishere = true
-    `;
-    if (signerResult.length === 0) throw new Error('Signer not found');
-
-    const storedPassphrase = normalizePassphrase(signerResult[0].passphrase);
-    const enteredPassphrase = normalizePassphrase(signerPassphrase);
-    const storedWords = storedPassphrase.split(/\s+/);
-    const lastWord = storedWords[storedWords.length - 1];
-
-    if (enteredPassphrase !== storedPassphrase && enteredPassphrase !== lastWord) {
-      throw new Error('Invalid passphrase. Authentication failed.');
+    const participantIds = mission.participant_user_ids;
+    if (!participantIds || participantIds.length === 0) {
+      throw new Error('No participants in this session');
     }
+
+    const enteredPassphrase = normalizePassphrase(signerPassphrase || '');
+    if (!enteredPassphrase) throw new Error('Passphrase required');
+
+    const candidates = await sql`
+      SELECT id, firstname, lastname, passphrase, is_admin FROM users
+      WHERE id = ANY(${participantIds}::integer[])
+        AND id != ${mission.user_id}
+        AND ishere = true
+    `;
+
+    const matches = candidates.filter((c) => passphraseMatchesStored(c.passphrase, enteredPassphrase));
+
+    if (matches.length === 0) {
+      throw new Error(
+        'No guest in this session matched that passphrase. They must be checked in and not the mission owner.'
+      );
+    }
+    if (matches.length > 1) {
+      throw new Error('That passphrase matches more than one guest. Ask a host to fix duplicate passphrases.');
+    }
+
+    const signer = matches[0];
+    const signerUserId = signer.id;
 
     // Enforce signer constraint
     if (mission.signer_constraint === 'new_signer') {
@@ -388,7 +409,7 @@ export async function signOffMission(playerMissionId, signerUserId, signerPassph
     }
 
     if (mission.signer_constraint === 'admin_only') {
-      if (!signerResult[0].is_admin) {
+      if (!signer.is_admin) {
         throw new Error('This mission must be signed off by a host.');
       }
     }
@@ -403,7 +424,8 @@ export async function signOffMission(playerMissionId, signerUserId, signerPassph
 
     return {
       message: 'Mission signed off successfully',
-      bounty: mission.bounty || 0
+      bounty: mission.bounty || 0,
+      signerName: `${signer.firstname} ${signer.lastname}`.trim()
     };
   } catch (error) {
     console.error('Error signing off mission:', error);
