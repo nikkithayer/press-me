@@ -2,52 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isAdmin } from './utils/admin.js'
 
-const relationships = [
-  'a long lost childhood friend of the host',
-  'a former business partner of the host',
-  'the host\'s estranged sibling',
-  'a college roommate of the host',
-  'the host\'s ex-spouse',
-  'a former colleague from the host\'s previous job',
-  'the host\'s neighbor from their old apartment',
-  'a member of the host\'s book club',
-  'the host\'s personal trainer',
-  'a friend from the host\'s hiking group'
-]
-
-const alibis = [
-  'the host owes you money',
-  'you\'re here to collect on a bet you won',
-  'you\'re delivering a package for a mutual friend',
-  'you\'re here to discuss a business opportunity',
-  'you\'re attending as the host\'s plus-one',
-  'you\'re here to pick up something you left behind',
-  'you\'re delivering a message from a mutual acquaintance',
-  'you\'re here to finalize plans for an upcoming trip',
-  'you\'re attending as a favor to the host',
-  'you\'re here to discuss a shared investment'
-]
-
 function AgentTab({ agentName, firstName, lastName, currentUser, onLogout }) {
   const navigate = useNavigate()
   const [agentNameVisible, setAgentNameVisible] = useState(false)
   const [realNameVisible, setRealNameVisible] = useState(false)
-  const [relationship, setRelationship] = useState('')
-  const [alibi, setAlibi] = useState('')
-
-  const [showModal, setShowModal] = useState(false)
-  const [isClosing, setIsClosing] = useState(false)
-  const [modalRelationship, setModalRelationship] = useState('')
-  const [modalAlibi, setModalAlibi] = useState('')
-
-  const getRandomBackstory = () => {
-    setRelationship(relationships[Math.floor(Math.random() * relationships.length)])
-    setAlibi(alibis[Math.floor(Math.random() * alibis.length)])
-  }
-
-  useEffect(() => {
-    getRandomBackstory()
-  }, [])
 
   useEffect(() => {
     if (agentNameVisible) {
@@ -62,26 +20,6 @@ function AgentTab({ agentName, firstName, lastName, currentUser, onLogout }) {
       return () => clearTimeout(timer)
     }
   }, [realNameVisible])
-
-  const openModal = () => {
-    setModalRelationship(relationship)
-    setModalAlibi(alibi)
-    setShowModal(true)
-  }
-
-  const closeModal = () => {
-    setIsClosing(true)
-    setTimeout(() => {
-      setShowModal(false)
-      setIsClosing(false)
-    }, 300)
-  }
-
-  const saveModal = () => {
-    setRelationship(modalRelationship)
-    setAlibi(modalAlibi)
-    closeModal()
-  }
 
   const EyeOpen = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -125,12 +63,13 @@ function AgentTab({ agentName, firstName, lastName, currentUser, onLogout }) {
       </div>
 
       <div className="backstory-card">
-        <h3>Cover story</h3>
-        <p>You are {firstName} {lastName}, <span className="relationship">{relationship}</span>. You are here tonight because <span className="alibi">{alibi}</span>.</p>
-        <div className="backstory-buttons">
-          <button onClick={getRandomBackstory} className="reroll-button">Shuffle</button>
-          <button onClick={openModal} className="write-your-own-button">Write your own</button>
-        </div>
+        <h3>Briefing</h3>
+        <p>We've been following the movements of a mysterious hacker known as <strong>TH33_HACKERG0D</strong> and have reason to believe they are planning to detonate a doomsday device at some point on the evening of Saturday, May 16.</p>
+        <p>The device itself is located somewhere on the premises of <strong>MacGuffin Toys</strong>. You will be infiltrating the environment as part of their annual company party.</p>
+        <p>Initial intelligence suggests the company's employees are not very bright.</p>
+        <p>Your mission is to determine the location of this doomsday device and disable it. We've prepared a series of smaller missions that will help you maintain cover and locate the device. You can do missions in any order.</p>
+        <p>Due to the severity of the threat, we may have sent a few too many agents to retrieve the device. If you see a fellow agent in disguise, please be respectful and do not blow their cover. Sign off on missions if they ask.</p>
+        <p>Good luck, have fun, and don't get caught.</p>
       </div>
 
       <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
@@ -145,49 +84,6 @@ function AgentTab({ agentName, firstName, lastName, currentUser, onLogout }) {
         )}
         <button onClick={onLogout} className="logout-button button-min">LOGOUT</button>
       </div>
-
-      {showModal && (
-        <div className={`modal ${isClosing ? 'closing' : ''}`}>
-          <div className="modal-header">
-            <button onClick={closeModal} className="close-button">Close</button>
-          </div>
-          <div className="modal-content">
-            <h2>Write Your Own!</h2>
-            <div className="field-group">
-              <label htmlFor="relationship-field">Relationship</label>
-              <div className="input-with-clear">
-                <textarea
-                  id="relationship-field"
-                  value={modalRelationship}
-                  onChange={(e) => setModalRelationship(e.target.value)}
-                  placeholder="Enter your relationship to the host..."
-                />
-                <button onClick={() => setModalRelationship('')} className="clear-button">
-                  <img src="/svgs/X.svg" alt="Clear" />
-                </button>
-              </div>
-            </div>
-            <div className="field-group">
-              <label htmlFor="alibi-field">Alibi</label>
-              <div className="input-with-clear">
-                <textarea
-                  id="alibi-field"
-                  value={modalAlibi}
-                  onChange={(e) => setModalAlibi(e.target.value)}
-                  placeholder="Enter your reason for being here..."
-                />
-                <button onClick={() => setModalAlibi('')} className="clear-button">
-                  <img src="/svgs/X.svg" alt="Clear" />
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button onClick={closeModal} className="cancel-button">Cancel</button>
-            <button onClick={saveModal} className="save-button">Save</button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
