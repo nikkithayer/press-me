@@ -337,7 +337,6 @@
 
 .mission-card {
   background-color: var(--white);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
   width: 100%;
   box-sizing: border-box;
   padding: var(--unit-sm);
@@ -345,14 +344,6 @@
 
 .mission-card.clickable {
   cursor: pointer;
-}
-
-.mission-card:nth-child(even).clickable:hover {
-  transform: scale(1.02) rotate(-0.25deg);
-}
-
-.mission-card:nth-child(odd).clickable:hover {
-  transform: scale(1.02) rotate(0.25deg);
 }
 
 .mission-card:nth-child(even){
