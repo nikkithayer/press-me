@@ -9,7 +9,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   const [error, setError] = useState(null)
   const [successKeys, setSuccessKeys] = useState({})
   const [completedMissions, setCompletedMissions] = useState(new Set())
-  const [activeTab, setActiveTab] = useState('missions')
+  const [activeTab, setActiveTab] = useState('agent')
   const [missionErrors, setMissionErrors] = useState({})
 
   const [activeSessionId, setActiveSessionId] = useState(null)

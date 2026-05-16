@@ -6,44 +6,35 @@ function Login({ onLogin }) {
   const { alias: urlAlias } = useParams()
   const navigate = useNavigate()
   const [alias, setAlias] = useState('')
-  const [password, setPassword] = useState('')
-  const [screenname, setScreenname] = useState('')
-  const [passphraseHint, setPassphraseHint] = useState('')
-  const [showUnauthorizedMessage, setShowUnauthorizedMessage] = useState(false)
-  const [failedAttempts, setFailedAttempts] = useState(0)
   const [aliasError, setAliasError] = useState(false)
+  const [loginError, setLoginError] = useState(false)
 
-  // If we're on the passphrase step, decode alias and validate
   useEffect(() => {
     if (urlAlias) {
       try {
-        // Decode URL-encoded base64 string first, then decode base64
         const base64Alias = decodeURIComponent(urlAlias)
         const decodedAlias = decodeURIComponent(escape(atob(base64Alias)))
-        setAlias(decodedAlias)
-        // Validate alias and get codename
-        validateAliasForPassphrase(decodedAlias)
+        signIn(decodedAlias)
       } catch (error) {
-        // If decoding fails, redirect back to home
         console.error('Error decoding alias from URL:', error)
         navigate('/', { replace: true })
       }
     }
   }, [urlAlias])
 
-  const validateAliasForPassphrase = async (aliasToValidate) => {
+  const signIn = async (aliasToSignIn) => {
     try {
-      const data = await neonApi.validateAlias(aliasToValidate)
-      if (data.valid) {
-        setScreenname(data.user.codename)
-        setPassphraseHint(data.passphraseHint || '')
-        setAliasError(false)
+      const data = await neonApi.signInByAlias(aliasToSignIn, navigator.userAgent)
+      if (data.success) {
+        onLogin(data.user)
+        navigate('/dashboard', { replace: true })
       } else {
-        // Invalid alias in URL, redirect back to home
+        setLoginError(true)
         navigate('/', { replace: true })
       }
     } catch (error) {
-      console.error('Error validating alias:', error)
+      console.error('Sign-in error:', error)
+      setLoginError(true)
       navigate('/', { replace: true })
     }
   }
@@ -51,105 +42,13 @@ function Login({ onLogin }) {
   const handleAliasSubmit = async (e) => {
     e.preventDefault()
     setAliasError(false)
-    
-    try {
-      const data = await neonApi.validateAlias(alias)
-      
-      if (data.valid) {
-        // Generate unique login URL from alias (base64 encoded to obscure the alias)
-        const base64Alias = btoa(unescape(encodeURIComponent(alias)))
-        // URL-encode the base64 string to handle special characters in URLs
-        const encodedAlias = encodeURIComponent(base64Alias)
-        navigate(`/login/${encodedAlias}`, { replace: true })
-      } else {
-        setAliasError(true)
-        setAlias('')
-      }
-    } catch (error) {
-      console.error('Error validating alias:', error)
-      setAliasError(true)
-      setAlias('')
-    }
+    setLoginError(false)
+
+    const base64Alias = btoa(unescape(encodeURIComponent(alias)))
+    const encodedAlias = encodeURIComponent(base64Alias)
+    navigate(`/login/${encodedAlias}`, { replace: true })
   }
 
-  const handlePassphraseSubmit = async (e) => {
-    e.preventDefault()
-    console.log('Access attempt:', { alias, password })
-    
-    try {
-      const data = await neonApi.authenticate(alias, password, null, navigator.userAgent)
-      
-      if (data.success) {
-        // Authentication successful
-        setShowUnauthorizedMessage(false)
-        onLogin(data.user)
-        navigate('/dashboard', { replace: true })
-      } else {
-        // Authentication failed
-        setFailedAttempts(prev => prev + 1)
-        setShowUnauthorizedMessage(true)
-        setPassword('')
-      }
-    } catch (error) {
-      console.error('Login error:', error)
-      setFailedAttempts(prev => prev + 1)
-      setShowUnauthorizedMessage(true)
-      setPassword('')
-    }
-  }
-
-  // Full screen lockout after 5 failed attempts
-  if (failedAttempts >= 5) {
-    return (
-      <div>
-        <div>
-          <h1>
-            Intrduder detected!
-          </h1>
-          <div>
-              Maybe you've been in deep cover too long. Maybe you're an imposter. Either way, find a host to get the situation sorted.
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // If we're on the passphrase step (has URL alias)
-  if (urlAlias) {
-    return (
-      <div className="login-container">
-        <div className="logo">
-          <h1>Press me, I talk!</h1>
-          <p>A Daw Industries game product</p>
-        </div>
-        <form onSubmit={handlePassphraseSubmit} className="login-form">
-          <div className="form-group">
-            <label htmlFor="password">Prove it's really you.</label>
-            <input
-              type="text"
-              id="password"
-              name="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={passphraseHint}
-              autoComplete="current-password"
-              required
-            />
-            {showUnauthorizedMessage && (
-              <div className="helper-error">
-                That ain't it, chief.
-              </div>
-            )}
-          </div>
-          <button type="submit" className="login-button">
-            Let the games begin!
-          </button>
-        </form>
-      </div>
-    )
-  }
-
-  // Alias entry step (home page)
   return (
     <div className="login-container">
       <div className="logo">
@@ -173,6 +72,11 @@ function Login({ onLogin }) {
           {aliasError && (
             <div className="helper-error">
               Invalid alias.
+            </div>
+          )}
+          {loginError && (
+            <div className="helper-error">
+              Alias not recognized. Check with a host.
             </div>
           )}
         </div>

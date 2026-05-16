@@ -14,13 +14,11 @@ export async function logLogin(agentName, success, ipAddress, userAgent) {
   }
 }
 
-// Validate alias (check if it exists without requiring passphrase)
-// ONLY accepts: "alias_1 alias_2" (with space, underscore, or concatenated) in that order
-// Case-insensitive comparison
-// Returns passphrase hint (all words except last word)
-export async function validateAlias(alias) {
+// Sign in by alias (no passphrase required).
+// ONLY accepts: "alias_1 alias_2" (with space, underscore, or concatenated) in that order.
+// Case-insensitive comparison.
+export async function signInByAlias(alias, userAgent) {
   try {
-    // Check for alias_1 followed by alias_2 with space, underscore, or no separator (case-insensitive)
     const userResult = await sql`
       SELECT id, firstname, lastname, alias_1, alias_2, passphrase, is_admin
       FROM users 
@@ -32,27 +30,27 @@ export async function validateAlias(alias) {
     `;
     
     if (userResult.length === 0) {
-      return { valid: false, message: 'Alias not found' };
+      return { success: false, message: 'Alias not found' };
     }
-    
-    // Get passphrase hint (all words except last word)
-    const passphrase = userResult[0].passphrase || '';
-    const passphraseWords = passphrase.trim().split(/\s+/);
-    const passphraseHint = passphraseWords.length > 1 
-      ? passphraseWords.slice(0, -1).join(' ')
-      : '';
-    
+
+    const user = userResult[0];
+    await logLogin(alias, true, null, userAgent);
+
     return {
-      valid: true,
+      success: true,
       user: {
-        alias_1: userResult[0].alias_1,
-        alias_2: userResult[0].alias_2,
-        codename: `${userResult[0].alias_1} ${userResult[0].alias_2}`
-      },
-      passphraseHint
+        id: user.id,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        alias_1: user.alias_1,
+        alias_2: user.alias_2,
+        codename: `${user.alias_1} ${user.alias_2}`,
+        passphrase: user.passphrase,
+        is_admin: user.is_admin || false
+      }
     };
   } catch (error) {
-    console.error('Error validating alias:', error);
+    console.error('Error signing in by alias:', error);
     throw error;
   }
 }

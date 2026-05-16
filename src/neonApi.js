@@ -17,7 +17,7 @@ export const neonApi = {
   
   // Auth
   logLogin: auth.logLogin,
-  validateAlias: auth.validateAlias,
+  signInByAlias: auth.signInByAlias,
   authenticate: auth.authenticate,
   validateAdminName: auth.validateAdminName,
   authenticateAdmin: auth.authenticateAdmin,
