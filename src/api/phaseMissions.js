@@ -1,5 +1,4 @@
 import { sql } from './db.js';
-import { generateRandomIntel } from './intel.js';
 
 // ── Admin CRUD ──────────────────────────────────────────────────────────────
 
@@ -306,11 +305,8 @@ export async function completePhaseMission(playerMissionId, answer, userId) {
       WHERE id = ${playerMissionId}
     `;
 
-    const newIntel = await generateRandomIntel(userId);
-
     return {
       message: 'Mission completed successfully',
-      intel: newIntel,
       bounty: mission.bounty || 0
     };
   } catch (error) {
@@ -405,11 +401,8 @@ export async function signOffMission(playerMissionId, signerUserId, signerPassph
       WHERE id = ${playerMissionId} AND completed = false
     `;
 
-    const newIntel = await generateRandomIntel(mission.user_id);
-
     return {
       message: 'Mission signed off successfully',
-      intel: newIntel,
       bounty: mission.bounty || 0
     };
   } catch (error) {
@@ -439,12 +432,9 @@ export async function adminCompletePhaseMission(playerMissionId) {
       WHERE id = ${playerMissionId}
     `;
 
-    const newIntel = await generateRandomIntel(mission.user_id);
-
     return {
       success: true,
-      message: 'Mission completed successfully',
-      intel: newIntel
+      message: 'Mission completed successfully'
     };
   } catch (error) {
     console.error('Error admin completing phase mission:', error);

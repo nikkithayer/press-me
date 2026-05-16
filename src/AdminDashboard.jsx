@@ -262,25 +262,6 @@ function AdminDashboard({ currentUser, onLogout }) {
     }
   }
 
-  const handleOpenVoting = async (sessionId) => {
-    try {
-      await neonApi.openVoting(sessionId)
-      await loadSessions()
-      alert('Voting opened! Users can now submit intel.')
-    } catch (error) {
-      alert(`Error opening voting: ${error.message || 'Please try again.'}`)
-    }
-  }
-
-  const handleCloseVoting = async (sessionId) => {
-    try {
-      await neonApi.closeVoting(sessionId)
-      await loadSessions()
-      alert('Voting closed.')
-    } catch (error) {
-      alert(`Error closing voting: ${error.message || 'Please try again.'}`)
-    }
-  }
 
   const handleOpenCreateModal = async () => {
     try {
@@ -637,9 +618,6 @@ function AdminDashboard({ currentUser, onLogout }) {
                                   {advancingPhase ? 'Advancing...' : `Advance to Phase ${(session.current_phase || 0) + 1}`}
                                 </button>
                               )}
-                              <button onClick={() => session.voting_open ? handleCloseVoting(session.id) : handleOpenVoting(session.id)} className="button-secondary">
-                                {session.voting_open ? 'Close Voting' : 'Open Voting'}
-                              </button>
                               <button onClick={() => handlePauseSession(session.id)} className="button-secondary">
                                 Pause
                               </button>

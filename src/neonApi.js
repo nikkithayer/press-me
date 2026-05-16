@@ -5,9 +5,7 @@
 import * as users from './api/users.js';
 import * as teams from './api/teams.js';
 import * as auth from './api/auth.js';
-import * as intel from './api/intel.js';
 import * as sessions from './api/sessions.js';
-import * as voting from './api/voting.js';
 import * as phaseMissions from './api/phaseMissions.js';
 
 // Assemble the neonApi object with all functions
@@ -28,12 +26,6 @@ export const neonApi = {
   authenticateAdmin: auth.authenticateAdmin,
   getLoginStats: auth.getLoginStats,
   
-  // Intel
-  getAgentIntel: intel.getAgentIntel,
-  addIntel: intel.addIntel,
-  clearAgentIntel: intel.clearAgentIntel,
-  generateRandomIntel: intel.generateRandomIntel,
-  
   // Sessions
   getAllSessions: sessions.getAllSessions,
   getActiveSession: sessions.getActiveSession,
@@ -46,12 +38,6 @@ export const neonApi = {
   clearMissionsForNonSessionUsers: sessions.clearMissionsForNonSessionUsers,
   canAssignMissions: sessions.canAssignMissions,
   resetSession: sessions.resetSession,
-  openVoting: sessions.openVoting,
-  closeVoting: sessions.closeVoting,
-  
-  // Voting
-  hasSubmittedIntel: voting.hasSubmittedIntel,
-  submitIntel: voting.submitIntel,
 
   // Phase Missions
   createPhaseMission: phaseMissions.createPhaseMission,
