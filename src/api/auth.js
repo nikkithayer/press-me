@@ -14,6 +14,54 @@ export async function logLogin(agentName, success, ipAddress, userAgent) {
   }
 }
 
+// Sign in by real name (no passphrase required).
+// Accepts: "firstname lastname" — last name may be multiple words (case-insensitive).
+export async function signInByName(name, userAgent) {
+  try {
+    const nameParts = name.trim().split(/\s+/);
+    if (nameParts.length < 2) {
+      return { success: false, message: 'Please enter your full name (first and last)' };
+    }
+
+    const firstname = nameParts[0];
+    const lastname = nameParts.slice(1).join(' ');
+
+    const userResult = await sql`
+      SELECT id, firstname, lastname, alias_1, alias_2, passphrase, is_admin
+      FROM users 
+      WHERE LOWER(firstname) = LOWER(${firstname})
+        AND LOWER(lastname) = LOWER(${lastname})
+        AND ishere = true
+      LIMIT 1
+    `;
+
+    if (userResult.length === 0) {
+      return { success: false, message: 'Name not found' };
+    }
+
+    const user = userResult[0];
+    const displayLogin = `${user.firstname} ${user.lastname}`;
+    await logLogin(displayLogin, true, null, userAgent);
+
+    return {
+      success: true,
+      user: {
+        id: user.id,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        alias_1: user.alias_1,
+        alias_2: user.alias_2,
+        codename: `${user.alias_1} ${user.alias_2}`,
+        passphrase: user.passphrase,
+        is_admin: user.is_admin || false
+      }
+    };
+  } catch (error) {
+    console.error('Error signing in by name:', error);
+    throw error;
+  }
+}
+
 // Sign in by alias (no passphrase required).
 // ONLY accepts: "alias_1 alias_2" (with space, underscore, or concatenated) in that order.
 // Case-insensitive comparison.

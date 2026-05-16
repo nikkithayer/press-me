@@ -5,8 +5,8 @@ import { neonApi } from './neonApi'
 function Login({ onLogin }) {
   const { alias: urlAlias } = useParams()
   const navigate = useNavigate()
-  const [alias, setAlias] = useState('')
-  const [aliasError, setAliasError] = useState(false)
+  const [fullName, setFullName] = useState('')
+  const [nameError, setNameError] = useState(false)
   const [loginError, setLoginError] = useState(false)
 
   useEffect(() => {
@@ -16,15 +16,19 @@ function Login({ onLogin }) {
         const decodedAlias = decodeURIComponent(escape(atob(base64Alias)))
         signIn(decodedAlias)
       } catch (error) {
-        console.error('Error decoding alias from URL:', error)
+        console.error('Error decoding login token from URL:', error)
         navigate('/', { replace: true })
       }
     }
   }, [urlAlias])
 
-  const signIn = async (aliasToSignIn) => {
+  const signIn = async (identifier) => {
     try {
-      const data = await neonApi.signInByAlias(aliasToSignIn, navigator.userAgent)
+      const trimmed = identifier.trim()
+      let data = await neonApi.signInByName(trimmed, navigator.userAgent)
+      if (!data.success) {
+        data = await neonApi.signInByAlias(trimmed, navigator.userAgent)
+      }
       if (data.success) {
         onLogin(data.user)
         navigate('/dashboard', { replace: true })
@@ -39,14 +43,19 @@ function Login({ onLogin }) {
     }
   }
 
-  const handleAliasSubmit = async (e) => {
+  const handleNameSubmit = async (e) => {
     e.preventDefault()
-    setAliasError(false)
+    setNameError(false)
     setLoginError(false)
 
-    const base64Alias = btoa(unescape(encodeURIComponent(alias)))
-    const encodedAlias = encodeURIComponent(base64Alias)
-    navigate(`/login/${encodedAlias}`, { replace: true })
+    if (fullName.trim().split(/\s+/).filter(Boolean).length < 2) {
+      setNameError(true)
+      return
+    }
+
+    const base64Identifier = btoa(unescape(encodeURIComponent(fullName)))
+    const encodedIdentifier = encodeURIComponent(base64Identifier)
+    navigate(`/login/${encodedIdentifier}`, { replace: true })
   }
 
   return (
@@ -55,28 +64,28 @@ function Login({ onLogin }) {
         <h1>Press me, I talk!</h1>
         <p>A Daw Industries game product</p>
       </div>
-      <form onSubmit={handleAliasSubmit} className="login-form">
+      <form onSubmit={handleNameSubmit} className="login-form">
         <div className="form-group">
-          <label htmlFor="alias">Enter your alias</label>
+          <label htmlFor="fullName">Enter your name</label>
           <input
             type="text"
-            id="alias"
-            name="alias"
-            value={alias}
-            onChange={(e) => setAlias(e.target.value)}
-            placeholder="Your alias"
-            autoComplete="username"
+            id="fullName"
+            name="fullName"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="First and last name"
+            autoComplete="name"
             required
             autoFocus
           />
-          {aliasError && (
+          {nameError && (
             <div className="helper-error">
-              Invalid alias.
+              Use your full name (first and last).
             </div>
           )}
           {loginError && (
             <div className="helper-error">
-              Alias not recognized. Check with a host.
+              Name not recognized. Check spelling or ask a host.
             </div>
           )}
         </div>
