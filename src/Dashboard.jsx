@@ -1,7 +1,65 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { neonApi } from './neonApi'
+import { isAdmin } from './utils/admin.js'
 import AgentTab from './AgentTab'
 import MissionsTab from './MissionsTab'
+
+function BriefingModalPanel({ isClosing, onClose }) {
+  return (
+    <div className={`modal briefing-modal ${isClosing ? 'closing' : ''}`}>
+      <div className="modal-header">
+        <button type="button" onClick={onClose} className="close-button">Close</button>
+      </div>
+      <div className="modal-content">
+        <div className="backstory-card briefing-modal-card">
+          <img className="briefing-modal-seal" src="/briefing-seal.png" alt="" />
+          <h4>Briefing - TOP SECRET!!!</h4>
+          <p>We've been following the movements of a mysterious hacker known as <strong>th33_h4ckerG0d</strong> and have reason to believe they are planning to detonate a doomsday device at some point on the evening of Saturday, May 16.</p>
+          <p>The device itself is located somewhere on the premises of <strong>MacGuffin Toys</strong>. You will be infiltrating the environment as part of their annual company party.</p>
+          <p>Initial intelligence suggests the company's employees are not very bright.</p>
+          <p>Your mission is to determine the location of this doomsday device and disable it. We've prepared a series of smaller missions that will help you maintain cover and locate the device. You can do missions in any order.</p>
+          <p>Due to the severity of the threat, we may have sent a few too many agents to retrieve the device. If you see a fellow agent in disguise, please help them maintain their cover by playing along.</p>
+          <p><strong>Good luck, have fun, and don't get caught.</strong></p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DashboardFooter({ currentUser, onLogout }) {
+  const navigate = useNavigate()
+  return (
+    <footer className="dashboard-footer">
+      <AgentTab currentUser={currentUser} />
+      <div className="dashboard-footer-actions">
+        {isAdmin(currentUser) && (
+          <button type="button" className="admin-button button-min" onClick={() => navigate('/admin/login')}>
+            ADMIN
+          </button>
+        )}
+        <button type="button" className="logout-button button-min" onClick={onLogout}>LOGOUT</button>
+      </div>
+    </footer>
+  )
+}
+
+function BriefingStrip({ onOpenBriefing }) {
+  return (
+    <div className="dashboard-briefing-strip">
+      <div className="tab-content dashboard-briefing-inner">
+        <div className="agent-card">
+          <div className="passphrase-field">
+            <div className="passphrase-value concealed">BRIEFING</div>
+            <button type="button" className="toggle-button" onClick={onOpenBriefing}>
+              <span className="button-text">OPEN</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, currentUser }) {
   const [missions, setMissions] = useState([])
@@ -9,7 +67,6 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   const [error, setError] = useState(null)
   const [successKeys, setSuccessKeys] = useState({})
   const [completedMissions, setCompletedMissions] = useState(new Set())
-  const [activeTab, setActiveTab] = useState('agent')
   const [missionErrors, setMissionErrors] = useState({})
 
   const [activeSessionId, setActiveSessionId] = useState(null)
@@ -26,6 +83,9 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   const [completedBounty, setCompletedBounty] = useState(0)
   const [isInActiveSession, setIsInActiveSession] = useState(false)
   const [sessionCheckLoading, setSessionCheckLoading] = useState(true)
+
+  const [showBriefingModal, setShowBriefingModal] = useState(true)
+  const [isBriefingClosing, setIsBriefingClosing] = useState(false)
 
   // ── Session & mission data fetching ────────────────────────────────────────
 
@@ -157,9 +217,36 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     }
   }
 
-  // ── Mission modal ──────────────────────────────────────────────────────────
+  // ── Mission & briefing modals ─────────────────────────────────────────────
+
+  const resetMissionModal = () => {
+    setShowMissionModal(false)
+    setIsMissionClosing(false)
+    setSelectedMissionId(null)
+    setShowMissionSuccess(false)
+    setShowMissionFailed(false)
+    setMissionFailedMessage(null)
+    setCompletedBounty(0)
+    setSignoffSuccessSignerName(null)
+  }
+
+  const openBriefingModal = () => {
+    resetMissionModal()
+    setShowBriefingModal(true)
+    setIsBriefingClosing(false)
+  }
+
+  const closeBriefingModal = () => {
+    setIsBriefingClosing(true)
+    setTimeout(() => {
+      setShowBriefingModal(false)
+      setIsBriefingClosing(false)
+    }, 300)
+  }
 
   const openMissionModal = (missionId) => {
+    setShowBriefingModal(false)
+    setIsBriefingClosing(false)
     setSelectedMissionId(missionId)
     setShowMissionModal(true)
     setShowMissionSuccess(false)
@@ -179,20 +266,8 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   const closeMissionModal = () => {
     setIsMissionClosing(true)
     setTimeout(() => {
-      setShowMissionModal(false)
-      setIsMissionClosing(false)
-      setSelectedMissionId(null)
-      setShowMissionSuccess(false)
-      setShowMissionFailed(false)
-      setMissionFailedMessage(null)
-      setCompletedBounty(0)
-      setSignoffSuccessSignerName(null)
+      resetMissionModal()
     }, 300)
-  }
-
-  const handleTabChange = (tab) => {
-    setActiveTab(tab)
-    if (showMissionModal) closeMissionModal()
   }
 
   const handleSuccessKeyChange = (playerMissionId, value) => {
@@ -259,41 +334,27 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     }
   }
 
-  // ── Tab bar (shared across loading/error/normal states) ────────────────────
-
-  const TabBar = () => (
-    <div className="dashboard-header">
-      <div className="dashboard-tabs">
-        <button
-          className={`tab-button tab-briefing ${activeTab === 'agent' ? 'active' : ''}`}
-          onClick={() => handleTabChange('agent')}
-        >
-          BRIEFING
-        </button>
-        <button
-          className={`tab-button tab-missions ${activeTab === 'missions' ? 'active' : ''}`}
-          onClick={() => handleTabChange('missions')}
-        >
-          MISSIONS
-        </button>
-      </div>
-    </div>
-  )
-
-  // ── Loading state ──────────────────────────────────────────────────────────
+  // ── Loading state ─────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="dashboard-container">
-        <TabBar />
-        <div className={`dashboard-content dashboard-content-${activeTab}`}>
-          <div className="tab-content">
-            <div className="loading-spinner">
-              <div className="spinner"></div>
-              <p>LOADING MISSION DATA...</p>
+        <div className="dashboard-page">
+          <BriefingStrip onOpenBriefing={openBriefingModal} />
+          <div className="dashboard-missions-heading">MISSIONS</div>
+          <div className="dashboard-content dashboard-content-missions">
+            <div className="tab-content">
+              <div className="loading-spinner">
+                <div className="spinner"></div>
+                <p>LOADING MISSION DATA...</p>
+              </div>
             </div>
           </div>
+          <DashboardFooter currentUser={currentUser} onLogout={onLogout} />
         </div>
+        {showBriefingModal && (
+          <BriefingModalPanel isClosing={isBriefingClosing} onClose={closeBriefingModal} />
+        )}
       </div>
     )
   }
@@ -303,16 +364,23 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   if (error) {
     return (
       <div className="dashboard-container">
-        <TabBar />
-        <div className={`dashboard-content dashboard-content-${activeTab}`}>
-          <div className="tab-content">
-            <h1>ERROR</h1>
-            <p>{error}</p>
-            <div className="tab-actions">
-              <button onClick={fetchMissions} className="retry-button">RETRY</button>
+        <div className="dashboard-page">
+          <BriefingStrip onOpenBriefing={openBriefingModal} />
+          <div className="dashboard-missions-heading">MISSIONS</div>
+          <div className="dashboard-content dashboard-content-missions">
+            <div className="tab-content">
+              <h1>ERROR</h1>
+              <p>{error}</p>
+              <div className="tab-actions">
+                <button type="button" onClick={fetchMissions} className="retry-button">RETRY</button>
+              </div>
             </div>
           </div>
+          <DashboardFooter currentUser={currentUser} onLogout={onLogout} />
         </div>
+        {showBriefingModal && (
+          <BriefingModalPanel isClosing={isBriefingClosing} onClose={closeBriefingModal} />
+        )}
       </div>
     )
   }
@@ -323,17 +391,10 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
 
   return (
     <div className="dashboard-container">
-      <TabBar />
-
-      <div className={`dashboard-content dashboard-content-${activeTab}`}>
-        {activeTab === 'agent' && (
-          <AgentTab
-            currentUser={currentUser}
-            onLogout={onLogout}
-          />
-        )}
-
-        {activeTab === 'missions' && (
+      <div className="dashboard-page">
+        <BriefingStrip onOpenBriefing={openBriefingModal} />
+        <div className="dashboard-missions-heading">MISSIONS</div>
+        <div className="dashboard-content dashboard-content-missions">
           <MissionsTab
             isInActiveSession={isInActiveSession}
             missions={missions}
@@ -341,15 +402,20 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
             completedMissions={completedMissions}
             onMissionClick={openMissionModal}
           />
-        )}
+        </div>
+        <DashboardFooter currentUser={currentUser} onLogout={onLogout} />
       </div>
 
+      {showBriefingModal && (
+        <BriefingModalPanel isClosing={isBriefingClosing} onClose={closeBriefingModal} />
+      )}
+
       {showMissionModal && selectedMission && (
-        <div className={`modal ${isMissionClosing ? 'closing' : ''}`}>
+        <div className={`modal mission-modal ${isMissionClosing ? 'closing' : ''}`}>
           {!showMissionSuccess && !showMissionFailed ? (
             <>
               <div className="modal-header">
-                <button onClick={closeMissionModal} className="close-button">Close</button>
+                <button type="button" onClick={closeMissionModal} className="close-button">Close</button>
               </div>
               <div className="modal-content">
                 <h2>{selectedMission.title}</h2>
@@ -378,7 +444,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                 {selectedMission.completionType === 'signoff' && (
                   <>
                     {selectedMission.signoffPromptTemplate && (
-                      <div style={{ padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '4px', marginBottom: '12px', fontStyle: 'italic' }}>
+                      <div className="mission-signoff-preview">
                         {selectedMission.signoffPromptTemplate
                           .replace(/\{player_name\}/g, `${firstName} ${lastName}`)
                           .replace(/\{variable\}/g, selectedMission.variableValue || '')
@@ -387,22 +453,22 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                     )}
 
                     {selectedMission.signerConstraint === 'new_signer' && (
-                      <p style={{ fontSize: '0.85em', color: '#888', marginBottom: '8px' }}>
+                      <p className="mission-signoff-hint mission-signoff-hint--constraint-emphasis">
                         Must be someone who hasn't signed off on any of your other missions.
                       </p>
                     )}
                     {selectedMission.signerConstraint === 'same_signer' && (
-                      <p style={{ fontSize: '0.85em', color: '#888', marginBottom: '8px' }}>
+                      <p className="mission-signoff-hint">
                         Must be the same person who signed off on your earlier mission.
                       </p>
                     )}
                     {selectedMission.signerConstraint === 'admin_only' && (
-                      <p style={{ fontSize: '0.85em', color: '#888', marginBottom: '8px' }}>
+                      <p className="mission-signoff-hint">
                         Must be signed off by a host.
                       </p>
                     )}
 
-                    <p style={{ fontSize: '0.85em', color: '#888', marginBottom: '8px' }}>
+                    <p className="mission-signoff-hint">
                       Hand your phone to the person confirming this mission. They enter their passphrase below
                       (full phrase or last word).
                     </p>
@@ -433,6 +499,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
               </div>
               <div className="modal-footer">
                 <button
+                  type="button"
                   onClick={() => handleSubmitMission(selectedMissionId)}
                   disabled={
                     selectedMission.completionType === 'phrase'
@@ -448,7 +515,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
           ) : showMissionFailed ? (
             <>
               <div className="modal-header">
-                <button onClick={closeMissionModal} className="close-button">Close</button>
+                <button type="button" onClick={closeMissionModal} className="close-button">Close</button>
               </div>
               <div className="modal-content">
                 <div className="mission-failed">
@@ -465,7 +532,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
           ) : (
             <>
               <div className="modal-header">
-                <button onClick={closeMissionModal} className="close-button">Close</button>
+                <button type="button" onClick={closeMissionModal} className="close-button">Close</button>
               </div>
               <div className="modal-content">
                 <div className="mission-success">
@@ -480,6 +547,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                     <div className="bounty-award">
                       <p className="bounty-award-text">BONUS AWARDED: {completedBounty} pts</p>
                       <button
+                        type="button"
                         className="bounty-paid-button"
                         onClick={() => handleMarkBountyPaid(selectedMission.playerMissionId)}
                       >
