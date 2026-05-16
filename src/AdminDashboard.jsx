@@ -3,6 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { neonApi } from './neonApi'
 import { isAdmin } from './utils/admin.js'
 
+const PRODUCTION_URL = 'https://press-me-iota.vercel.app'
+
+function getPlayerLoginUrl(user) {
+  const alias = `${user.alias_1} ${user.alias_2}`
+  const base64Alias = btoa(unescape(encodeURIComponent(alias)))
+  return `${PRODUCTION_URL}/login/${encodeURIComponent(base64Alias)}`
+}
+
 // Helper function to format timestamp with proper timezone handling
 function formatTimestamp(timestamp) {
   if (!timestamp) return ''
@@ -699,7 +707,30 @@ function AdminDashboard({ currentUser, onLogout }) {
               </div>
             ) : (
               <div className="session-users-view">
-                <h3>Session Participants and Missions</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3>Session Participants and Missions</h3>
+                  <button
+                    className="button-secondary"
+                    style={{ fontSize: '0.85em' }}
+                    onClick={() => {
+                      const rows = [['Name', 'URL']]
+                      sessionUsers.forEach(user => {
+                        const name = `${user.firstname} ${user.lastname}`
+                        const url = getPlayerLoginUrl(user)
+                        rows.push([name, url])
+                      })
+                      const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n')
+                      const blob = new Blob([csv], { type: 'text/csv' })
+                      const a = document.createElement('a')
+                      a.href = URL.createObjectURL(blob)
+                      a.download = `${activeSession.name}-player-urls.csv`
+                      a.click()
+                      URL.revokeObjectURL(a.href)
+                    }}
+                  >
+                    Download Player URLs
+                  </button>
+                </div>
                 {sessionUsers.map(user => {
                   const missions = playerMissions.filter(m => m.userId === user.id)
                   const phases = [0, 1, 2, 3].filter(p => missions.some(m => m.phase === p))
