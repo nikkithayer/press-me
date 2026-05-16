@@ -178,8 +178,58 @@
   width: 100%;
 }
 
-.dashboard-briefing-strip .agent-card {
+.dashboard-briefing-strip .briefing-strip-card {
   margin: 0;
+}
+
+/* Inverted mission card: black surface, white hard shadow (matches mission-card offset). */
+.briefing-strip-card {
+  background-color: var(--black);
+  color: var(--white);
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--unit-sm);
+  transform: rotate(-0.25deg);
+  box-shadow: -5px 5px 0px 0 var(--white);
+}
+
+.briefing-strip-row {
+  display: flex;
+  align-items: center;
+  gap: var(--unit-sm);
+}
+
+.briefing-strip-label {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.15em;
+  line-height: 1.2;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--white);
+}
+
+.briefing-strip-open {
+  flex-shrink: 0;
+  margin: 0;
+  cursor: pointer;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.85em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--black);
+  background-color: var(--white);
+  border: 2px solid var(--black);
+  padding: var(--unit-xs) var(--unit-sm);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.briefing-strip-open:hover {
+  background-color: var(--black);
+  color: var(--white);
 }
 
 .dashboard-missions-heading {
@@ -330,7 +380,7 @@
 .missions-grid {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
   padding: var(--unit-base);
   margin-bottom: var(--unit-lg);
 }
@@ -694,6 +744,165 @@
 
 .modal.mission-modal {
   z-index: 2100;
+  background-color: var(--white);
+  color: var(--black);
+}
+
+.modal.mission-modal .modal-content h2,
+.modal.mission-modal .modal-content > p {
+  color: var(--black);
+}
+
+.modal.mission-modal .modal-content input,
+.modal.mission-modal .modal-content select.mission-signer-select {
+  border: 2px solid var(--black);
+  color: var(--black);
+  background-color: var(--white);
+  font-size: 15px;
+}
+
+.modal.mission-modal .modal-content input::placeholder {
+  color: rgba(46, 40, 36, 0.45);
+}
+
+.modal.mission-modal .mission-signoff-preview {
+  color: var(--black);
+  font-style: normal;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0 0 var(--unit-base) 0;
+  border-radius: 0;
+}
+
+.modal.mission-modal .mission-signoff-preview--madlib {
+  font-family: 'Arbutus Slab', Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  line-height: 1.65;
+  font-style: normal;
+}
+
+.modal.mission-modal .mission-signoff-madlib-fill {
+  font-family: 'Caveat', cursive;
+  font-size: 1.55em;
+  font-weight: 600;
+  color: #244a7a;
+  border-bottom: 2px dashed rgba(36, 74, 122, 0.42);
+  padding: 0 5px 0;
+  margin: 0 2px;
+  vertical-align: baseline;
+  line-height: 1.15;
+}
+
+.modal.mission-modal .mission-signoff-madlib-fill.mission-signoff-madlib-blank {
+  min-width: 7ch;
+  display: inline-block;
+  color: transparent;
+  border-bottom: 2px solid rgba(46, 40, 36, 0.5);
+  border-bottom-style: solid;
+  padding: 0;
+  margin: 0 4px;
+}
+
+.modal.mission-modal .mission-witness-panel {
+  border: 2px solid var(--black);
+  padding: var(--unit-base);
+  margin-top: var(--unit-lg);
+  box-sizing: border-box;
+}
+
+.modal.mission-modal .mission-witness-panel .mission-witness-instruction {
+  margin-top: 0;
+}
+
+.modal.mission-modal .mission-inline-action {
+  margin-top: var(--unit-base);
+}
+
+.modal.mission-modal .mission-inline-action .save-button {
+  width: 100%;
+}
+
+.modal.mission-modal .mission-complete-outline-button {
+  background-color: var(--white);
+  color: var(--black);
+  border: 2px solid var(--black);
+  text-transform: uppercase;
+  padding: var(--unit-sm) var(--unit-base);
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.95em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.modal.mission-modal .mission-complete-outline-button:hover:not(:disabled) {
+  background-color: var(--black);
+  color: var(--white);
+}
+
+.modal.mission-modal .mission-witness-instruction {
+  margin: 0 0 var(--unit-sm) 0;
+  font-size: 1.1em;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--black);
+}
+
+.modal.mission-modal .modal-content p.mission-signoff-hint {
+  color: rgba(46, 40, 36, 0.7);
+  font-size: 15px;
+}
+
+.modal.mission-modal .modal-content p.mission-signoff-hint.mission-signoff-hint--constraint-emphasis {
+  color: var(--blue);
+  font-size: 16px;
+}
+
+.modal.mission-modal .close-button {
+  color: var(--black);
+  border-color: var(--black);
+}
+
+.modal.mission-modal .close-button:hover {
+  background-color: var(--black);
+  color: var(--white);
+}
+
+.modal.mission-modal .field-group label {
+  color: var(--black);
+  font-size: 15px;
+}
+
+.modal.mission-modal .field-group textarea {
+  border-color: var(--black);
+  background-color: var(--white);
+  color: var(--black);
+}
+
+.modal.mission-modal h2 {
+  color: var(--black);
+}
+
+.modal.mission-modal .mission-success p {
+  color: var(--black);
+}
+
+.modal.mission-modal .mission-failed-message {
+  color: var(--black);
+}
+
+.modal.mission-modal .modal-footer button {
+  background-color: var(--black);
+  color: var(--white);
+  border: 2px solid var(--black);
+}
+
+.modal.mission-modal .modal-footer button:hover:not(:disabled) {
+  background-color: var(--white);
+  color: var(--black);
 }
 
 .modal.briefing-modal {
@@ -844,15 +1053,16 @@
   background-color: rgba(245, 231, 203, 0.08);
 }
 
-.modal .mission-signoff-hint {
+.modal .modal-content p.mission-signoff-hint {
   font-size: 0.85em;
   color: rgba(245, 231, 203, 0.65);
   margin: 0 0 8px 0;
+  line-height: 1.35;
 }
 
-.modal .mission-signoff-hint--constraint-emphasis {
-  font-size: 0.75em;
-  color: var(--red);
+.modal .modal-content p.mission-signoff-hint.mission-signoff-hint--constraint-emphasis {
+  font-size: 15px;
+  color: var(--blue);
 }
 
 .mission-success {

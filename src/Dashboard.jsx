@@ -5,6 +5,36 @@ import { isAdmin } from './utils/admin.js'
 import AgentTab from './AgentTab'
 import MissionsTab from './MissionsTab'
 
+function renderSignoffMadlibPreview(template, firstName, lastName, variableValue) {
+  const playerName = [firstName, lastName].filter(Boolean).join(' ').trim()
+  const varVal = (variableValue || '').trim()
+  const parts = template.split(/(\{player_name\}|\{variable\}|\{signer_name\})/g)
+  return parts.map((part, i) => {
+    if (part === '{player_name}') {
+      return (
+        <span key={i} className="mission-signoff-madlib-fill">
+          {playerName || '________'}
+        </span>
+      )
+    }
+    if (part === '{variable}') {
+      return (
+        <span key={i} className="mission-signoff-madlib-fill">
+          {varVal || '________'}
+        </span>
+      )
+    }
+    if (part === '{signer_name}') {
+      return (
+        <span key={i} className="mission-signoff-madlib-fill mission-signoff-madlib-blank">
+          {' '}
+        </span>
+      )
+    }
+    return <span key={i}>{part}</span>
+  })
+}
+
 function BriefingModalPanel({ isClosing, onClose }) {
   return (
     <div className={`modal briefing-modal ${isClosing ? 'closing' : ''}`}>
@@ -48,11 +78,11 @@ function BriefingStrip({ onOpenBriefing }) {
   return (
     <div className="dashboard-briefing-strip">
       <div className="tab-content dashboard-briefing-inner">
-        <div className="agent-card">
-          <div className="passphrase-field">
-            <div className="passphrase-value concealed">BRIEFING</div>
-            <button type="button" className="toggle-button" onClick={onOpenBriefing}>
-              <span className="button-text">OPEN</span>
+        <div className="briefing-strip-card">
+          <div className="briefing-strip-row">
+            <div className="briefing-strip-label">Briefing</div>
+            <button type="button" className="briefing-strip-open" onClick={onOpenBriefing}>
+              Open
             </button>
           </div>
         </div>
@@ -73,6 +103,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   const [currentPhase, setCurrentPhase] = useState(0)
   const [signerPassphrase, setSignerPassphrase] = useState('')
   const [signoffSuccessSignerName, setSignoffSuccessSignerName] = useState(null)
+  const [signoffPhase, setSignoffPhase] = useState('brief')
 
   const [showMissionModal, setShowMissionModal] = useState(false)
   const [isMissionClosing, setIsMissionClosing] = useState(false)
@@ -228,6 +259,8 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     setMissionFailedMessage(null)
     setCompletedBounty(0)
     setSignoffSuccessSignerName(null)
+    setSignoffPhase('brief')
+    setSignerPassphrase('')
   }
 
   const openBriefingModal = () => {
@@ -255,6 +288,8 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     setMissionFailedMessage(null)
     setCompletedBounty(0)
     setSignoffSuccessSignerName(null)
+    setSignoffPhase('brief')
+    setSignerPassphrase('')
 
     const mission = missions.find(m => m.playerMissionId === missionId)
     if (mission && mission.completed && !mission.bountyPaid && mission.bounty > 0) {
@@ -304,6 +339,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
       setCompletedMissions(prev => new Set([...prev, playerMissionId]))
       setSuccessKeys(prev => { const n = { ...prev }; delete n[playerMissionId]; return n })
       setSignerPassphrase('')
+      setSignoffPhase('brief')
       if (mission.completionType === 'signoff' && result.signerName) {
         setSignoffSuccessSignerName(result.signerName)
       }
@@ -340,8 +376,8 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     return (
       <div className="dashboard-container">
         <div className="dashboard-page">
-          <BriefingStrip onOpenBriefing={openBriefingModal} />
           <div className="dashboard-missions-heading">MISSIONS</div>
+          <BriefingStrip onOpenBriefing={openBriefingModal} />
           <div className="dashboard-content dashboard-content-missions">
             <div className="tab-content">
               <div className="loading-spinner">
@@ -365,8 +401,8 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     return (
       <div className="dashboard-container">
         <div className="dashboard-page">
-          <BriefingStrip onOpenBriefing={openBriefingModal} />
           <div className="dashboard-missions-heading">MISSIONS</div>
+          <BriefingStrip onOpenBriefing={openBriefingModal} />
           <div className="dashboard-content dashboard-content-missions">
             <div className="tab-content">
               <h1>ERROR</h1>
@@ -392,8 +428,8 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   return (
     <div className="dashboard-container">
       <div className="dashboard-page">
-        <BriefingStrip onOpenBriefing={openBriefingModal} />
         <div className="dashboard-missions-heading">MISSIONS</div>
+        <BriefingStrip onOpenBriefing={openBriefingModal} />
         <div className="dashboard-content dashboard-content-missions">
           <MissionsTab
             isInActiveSession={isInActiveSession}
@@ -438,78 +474,126 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                         placeholder="Enter your answer..."
                       />
                     </div>
+                    {missionErrors[selectedMissionId] && (
+                      <div className="mission-error">{missionErrors[selectedMissionId]}</div>
+                    )}
+                    <div className="mission-inline-action">
+                      <button
+                        type="button"
+                        onClick={() => handleSubmitMission(selectedMissionId)}
+                        disabled={!successKeys[selectedMissionId]}
+                        className="save-button"
+                      >
+                        Submit
+                      </button>
+                    </div>
                   </div>
                 )}
 
-                {selectedMission.completionType === 'signoff' && (
+                {selectedMission.completionType === 'signoff' && signoffPhase === 'brief' && (
                   <>
-                    {selectedMission.signoffPromptTemplate && (
-                      <div className="mission-signoff-preview">
-                        {selectedMission.signoffPromptTemplate
-                          .replace(/\{player_name\}/g, `${firstName} ${lastName}`)
-                          .replace(/\{variable\}/g, selectedMission.variableValue || '')
-                          .replace(/\{signer_name\}/g, '________')}
-                      </div>
-                    )}
-
                     {selectedMission.signerConstraint === 'new_signer' && (
                       <p className="mission-signoff-hint mission-signoff-hint--constraint-emphasis">
                         Must be someone who hasn't signed off on any of your other missions.
                       </p>
                     )}
                     {selectedMission.signerConstraint === 'same_signer' && (
-                      <p className="mission-signoff-hint">
+                      <p className="mission-signoff-hint mission-signoff-hint--constraint-emphasis">
                         Must be the same person who signed off on your earlier mission.
                       </p>
                     )}
                     {selectedMission.signerConstraint === 'admin_only' && (
-                      <p className="mission-signoff-hint">
+                      <p className="mission-signoff-hint mission-signoff-hint--constraint-emphasis">
                         Must be signed off by a host.
                       </p>
                     )}
-
-                    <p className="mission-signoff-hint">
-                      Hand your phone to the person confirming this mission. They enter their passphrase below
-                      (full phrase or last word).
-                    </p>
-
-                    <div className="field-group">
-                      <label htmlFor="signer-passphrase">Passphrase</label>
-                      <div className="input-with-clear">
-                        <input
-                          id="signer-passphrase"
-                          type="password"
-                          value={signerPassphrase}
-                          onChange={(e) => setSignerPassphrase(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && signerPassphrase) {
-                              handleSubmitMission(selectedMissionId)
-                            }
-                          }}
-                          placeholder="Signer enters passphrase…"
-                        />
-                      </div>
+                    {missionErrors[selectedMissionId] && (
+                      <div className="mission-error">{missionErrors[selectedMissionId]}</div>
+                    )}
+                    <div className="mission-inline-action">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMissionErrors(prev => ({ ...prev, [selectedMissionId]: '' }))
+                          setSignerPassphrase('')
+                          setSignoffPhase('witness')
+                        }}
+                        className="save-button mission-complete-outline-button"
+                      >
+                        Complete mission
+                      </button>
                     </div>
                   </>
                 )}
 
-                {missionErrors[selectedMissionId] && (
-                  <div className="mission-error">{missionErrors[selectedMissionId]}</div>
+                {selectedMission.completionType === 'signoff' && signoffPhase === 'witness' && (
+                  <>
+                    {selectedMission.signerConstraint === 'new_signer' && (
+                      <p className="mission-signoff-hint mission-signoff-hint--constraint-emphasis">
+                        Must be someone who hasn't signed off on any of your other missions.
+                      </p>
+                    )}
+                    {selectedMission.signerConstraint === 'same_signer' && (
+                      <p className="mission-signoff-hint mission-signoff-hint--constraint-emphasis">
+                        Must be the same person who signed off on your earlier mission.
+                      </p>
+                    )}
+                    {selectedMission.signerConstraint === 'admin_only' && (
+                      <p className="mission-signoff-hint mission-signoff-hint--constraint-emphasis">
+                        Must be signed off by a host.
+                      </p>
+                    )}
+
+                    <div className="mission-witness-panel">
+                      <p className="mission-witness-instruction">
+                        Hand your phone to an authorized witness to confirm.
+                      </p>
+
+                      {selectedMission.signoffPromptTemplate && (
+                        <div className="mission-signoff-preview mission-signoff-preview--madlib">
+                          {renderSignoffMadlibPreview(
+                            selectedMission.signoffPromptTemplate,
+                            firstName,
+                            lastName,
+                            selectedMission.variableValue
+                          )}
+                        </div>
+                      )}
+
+                      <div className="field-group">
+                        <label htmlFor="signer-passphrase">Authorized witness</label>
+                        <div className="input-with-clear">
+                          <input
+                            id="signer-passphrase"
+                            type="password"
+                            value={signerPassphrase}
+                            onChange={(e) => setSignerPassphrase(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && signerPassphrase) {
+                                handleSubmitMission(selectedMissionId)
+                              }
+                            }}
+                            placeholder="Enter passphrase"
+                            autoComplete="off"
+                          />
+                        </div>
+                      </div>
+                      {missionErrors[selectedMissionId] && (
+                        <div className="mission-error">{missionErrors[selectedMissionId]}</div>
+                      )}
+                      <div className="mission-inline-action">
+                        <button
+                          type="button"
+                          onClick={() => handleSubmitMission(selectedMissionId)}
+                          disabled={!signerPassphrase}
+                          className="save-button"
+                        >
+                          Sign off
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
-              </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  onClick={() => handleSubmitMission(selectedMissionId)}
-                  disabled={
-                    selectedMission.completionType === 'phrase'
-                      ? !successKeys[selectedMissionId]
-                      : !signerPassphrase
-                  }
-                  className="save-button"
-                >
-                  {selectedMission.completionType === 'signoff' ? 'Confirm Sign-off' : 'Submit'}
-                </button>
               </div>
             </>
           ) : showMissionFailed ? (
