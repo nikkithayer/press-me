@@ -414,18 +414,21 @@ export async function signOffMission(playerMissionId, signerPassphrase) {
       }
     }
 
-    // Complete the mission
-    await sql`
+    const updated = await sql`
       UPDATE player_missions
       SET completed = true, completed_at = NOW(),
           signed_off_by = ${signerUserId}, signed_off_at = NOW()
       WHERE id = ${playerMissionId} AND completed = false
+      RETURNING signed_off_at
     `;
+
+    if (updated.length === 0) throw new Error('Mission already completed');
 
     return {
       message: 'Mission signed off successfully',
       bounty: mission.bounty || 0,
-      signerName: `${signer.firstname} ${signer.lastname}`.trim()
+      signerName: `${signer.firstname} ${signer.lastname}`.trim(),
+      signedOffAt: updated[0].signed_off_at
     };
   } catch (error) {
     console.error('Error signing off mission:', error);

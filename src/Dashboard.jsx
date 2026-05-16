@@ -35,6 +35,13 @@ function renderSignoffMadlibPreview(template, firstName, lastName, variableValue
   })
 }
 
+function formatWitnessSignedAt(iso) {
+  if (iso == null || iso === '') return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
 function BriefingModalPanel({ isClosing, onClose }) {
   return (
     <div className={`modal briefing-modal ${isClosing ? 'closing' : ''}`}>
@@ -45,7 +52,7 @@ function BriefingModalPanel({ isClosing, onClose }) {
         <div className="backstory-card briefing-modal-card">
           <img className="briefing-modal-seal" src="/briefing-seal.png" alt="" />
           <h4>Briefing - TOP SECRET!!!</h4>
-          <p>We've been following the movements of a mysterious hacker known as <strong>th33_h4ckerG0d</strong> and have reason to believe they are planning to detonate a doomsday device at some point on the evening of Saturday, May 16.</p>
+          <p>We've been following the movements of a mysterious hacker known as <strong>tha_h4ck3rG0d</strong> and have reason to believe they are planning to detonate a doomsday device at some point on the evening of Saturday, May 16.</p>
           <p>The device itself is located somewhere on the premises of <strong>MacGuffin Toys</strong>. You will be infiltrating the environment as part of their annual company party.</p>
           <p>Initial intelligence suggests the company's employees are not very bright.</p>
           <p>Your mission is to determine the location of this doomsday device and disable it. We've prepared a series of smaller missions that will help you maintain cover and locate the device. You can do missions in any order.</p>
@@ -103,6 +110,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   const [currentPhase, setCurrentPhase] = useState(0)
   const [signerPassphrase, setSignerPassphrase] = useState('')
   const [signoffSuccessSignerName, setSignoffSuccessSignerName] = useState(null)
+  const [signoffSignedAt, setSignoffSignedAt] = useState(null)
   const [signoffPhase, setSignoffPhase] = useState('brief')
 
   const [showMissionModal, setShowMissionModal] = useState(false)
@@ -261,6 +269,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     setSignoffSuccessSignerName(null)
     setSignoffPhase('brief')
     setSignerPassphrase('')
+    setSignoffSignedAt(null)
   }
 
   const openBriefingModal = () => {
@@ -290,9 +299,20 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     setSignoffSuccessSignerName(null)
     setSignoffPhase('brief')
     setSignerPassphrase('')
+    setSignoffSignedAt(null)
 
     const mission = missions.find(m => m.playerMissionId === missionId)
-    if (mission && mission.completed && !mission.bountyPaid && mission.bounty > 0) {
+    if (mission?.completionType === 'signoff' && mission.completed) {
+      setShowMissionSuccess(false)
+      setSignoffPhase('witnessDone')
+      setSignoffSuccessSignerName(mission.signerName || null)
+      setSignoffSignedAt(mission.signedOffAt || null)
+      if (!mission.bountyPaid && mission.bounty > 0) {
+        setCompletedBounty(mission.bounty)
+      } else {
+        setCompletedBounty(0)
+      }
+    } else if (mission && mission.completed && !mission.bountyPaid && mission.bounty > 0) {
       setShowMissionSuccess(true)
       setCompletedBounty(mission.bounty)
     }
@@ -339,16 +359,33 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
       setCompletedMissions(prev => new Set([...prev, playerMissionId]))
       setSuccessKeys(prev => { const n = { ...prev }; delete n[playerMissionId]; return n })
       setSignerPassphrase('')
-      setSignoffPhase('brief')
-      if (mission.completionType === 'signoff' && result.signerName) {
-        setSignoffSuccessSignerName(result.signerName)
-      }
 
-      if (result.bounty > 0) setCompletedBounty(result.bounty)
-      if (selectedMissionId === playerMissionId) {
-        setShowMissionSuccess(true)
-        setShowMissionFailed(false)
-        setMissionErrors(prev => ({ ...prev, [playerMissionId]: '' }))
+      if (mission.completionType === 'signoff') {
+        setSignoffPhase('witnessDone')
+        setSignoffSuccessSignerName(result.signerName || null)
+        setSignoffSignedAt(result.signedOffAt ?? null)
+        setMissions(prev => prev.map(m =>
+          m.playerMissionId === playerMissionId
+            ? {
+              ...m,
+              completed: true,
+              signerName: result.signerName ?? m.signerName,
+              signedOffAt: result.signedOffAt ?? m.signedOffAt
+            }
+            : m
+        ))
+        if (result.bounty > 0) setCompletedBounty(result.bounty)
+        if (selectedMissionId === playerMissionId) {
+          setShowMissionFailed(false)
+          setMissionErrors(prev => ({ ...prev, [playerMissionId]: '' }))
+        }
+      } else {
+        if (result.bounty > 0) setCompletedBounty(result.bounty)
+        if (selectedMissionId === playerMissionId) {
+          setShowMissionSuccess(true)
+          setShowMissionFailed(false)
+          setMissionErrors(prev => ({ ...prev, [playerMissionId]: '' }))
+        }
       }
     } catch (error) {
       console.error('Error completing mission:', error)
@@ -594,6 +631,40 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                     </div>
                   </>
                 )}
+                {selectedMission.completionType === 'signoff' && signoffPhase === 'witnessDone' && (
+                  <div className="mission-witness-panel mission-witness-panel--signed">
+                    {selectedMission.signoffPromptTemplate && (
+                      <div className="mission-signoff-preview mission-signoff-preview--madlib">
+                        {renderSignoffMadlibPreview(
+                          selectedMission.signoffPromptTemplate,
+                          firstName,
+                          lastName,
+                          selectedMission.variableValue
+                        )}
+                      </div>
+                    )}
+                    <p className="mission-witness-signed-summary">
+                      Signed by{' '}
+                      <strong>{signoffSuccessSignerName || selectedMission.signerName}</strong>
+                      {' '}
+                      at {formatWitnessSignedAt(signoffSignedAt ?? selectedMission.signedOffAt)}.
+                    </p>
+                    {completedBounty > 0 && !selectedMission.bountyPaid && (
+                      <div className="mission-witness-bounty-wrap">
+                        <div className="bounty-award">
+                          <p className="bounty-award-text">BONUS AWARDED: {completedBounty} pts</p>
+                          <button
+                            type="button"
+                            className="bounty-paid-button"
+                            onClick={() => handleMarkBountyPaid(selectedMission.playerMissionId)}
+                          >
+                            PAID
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           ) : showMissionFailed ? (
@@ -622,11 +693,6 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                 <div className="mission-success">
                   <p>Mission success</p>
                   <h2>{selectedMission.title}</h2>
-                  {selectedMission.completionType === 'signoff' && (signoffSuccessSignerName || selectedMission.signerName) && (
-                    <p style={{ marginTop: '8px' }}>
-                      Signed off by {signoffSuccessSignerName || selectedMission.signerName}.
-                    </p>
-                  )}
                   {completedBounty > 0 && (
                     <div className="bounty-award">
                       <p className="bounty-award-text">BONUS AWARDED: {completedBounty} pts</p>

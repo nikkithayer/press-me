@@ -811,6 +811,45 @@
   box-sizing: border-box;
 }
 
+.modal.mission-modal .mission-witness-panel--signed {
+  background-color: var(--black);
+  color: var(--white);
+  border: 2px solid var(--black);
+}
+
+.modal.mission-modal .mission-witness-panel--signed .mission-signoff-preview--madlib {
+  color: var(--white);
+}
+
+.modal.mission-modal .mission-witness-panel--signed .mission-signoff-madlib-fill {
+  color: #c5daf3;
+  border-bottom-color: rgba(197, 218, 243, 0.55);
+}
+
+.modal.mission-modal .mission-witness-panel--signed .mission-signoff-madlib-fill.mission-signoff-madlib-blank {
+  border-bottom-color: rgba(245, 231, 203, 0.55);
+}
+
+.modal.mission-modal .mission-witness-signed-summary {
+  margin: var(--unit-base) 0 0 0;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--white);
+}
+
+.modal.mission-modal .mission-witness-signed-summary:first-child {
+  margin-top: 0;
+}
+
+.modal.mission-modal .mission-witness-signed-summary strong {
+  font-weight: 700;
+  color: var(--white);
+}
+
+.modal.mission-modal .mission-witness-bounty-wrap {
+  margin-top: var(--unit-base);
+}
+
 .modal.mission-modal .mission-witness-panel .mission-witness-instruction {
   margin-top: 0;
 }
