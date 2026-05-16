@@ -1531,7 +1531,7 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
               </div>
             ) : (
               <>
-                {[1, 2, 3].map(phase => {
+                {[0, 1, 2, 3].map(phase => {
                   const phaseMissions = missions.filter(m => m.phase === phase)
                   if (phaseMissions.length === 0) return null
                   const isLocked = phase < currentPhase
@@ -1539,10 +1539,6 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, te
 
                   return (
                     <div key={phase} style={{ marginBottom: '16px' }}>
-                      <div style={{ marginBottom: '8px', fontWeight: 'bold', opacity: isLocked ? 0.5 : 1 }}>
-                        Phase {phase} {isLocked ? '(Locked)' : isCurrent ? '(Current)' : ''}
-                      </div>
-
                       <div className="missions-grid">
                         {phaseMissions
                           .filter(m => !completedMissions.has(m.playerMissionId))
