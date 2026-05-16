@@ -1,15 +1,10 @@
--- Create the spy database
-CREATE DATABASE spy_database;
+-- Active schema for press-me (MacGuffin Toys / FBS game)
+-- Tables: users, login_logs, sessions, phase_missions, player_missions
 
--- Connect to the spy database
-\c spy_database;
-
--- Create users table
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     firstname VARCHAR(50) NOT NULL,
     lastname VARCHAR(50) NOT NULL,
-    team VARCHAR(4) NOT NULL,
     ishere BOOLEAN DEFAULT true,
     alias_1 VARCHAR(50) NOT NULL,
     alias_2 VARCHAR(50) NOT NULL,
@@ -18,41 +13,7 @@ CREATE TABLE users (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Create intel table
-CREATE TABLE intel (
-    id SERIAL PRIMARY KEY,
-    clue_text TEXT NOT NULL,
-    agents_who_know INTEGER[]
-);
-
--- Create missions table
-CREATE TABLE missions (
-    id INTEGER PRIMARY KEY,
-    title TEXT NOT NULL,
-    completed BOOLEAN DEFAULT FALSE,
-    mission_body TEXT NOT NULL,
-    assigned_agent INTEGER,
-    past_assigned_agents INTEGER[],
-    assigned_now BOOLEAN DEFAULT FALSE,
-    mission_expires TIMESTAMP,
-    success_key TEXT,
-    type VARCHAR(20)
-);
-
--- Create teams table
-INSERT INTO teams (id, name, points) VALUES
-    (1, 'red', 0),
-    (2, 'blue', 0);
-
--- Create toys table
-CREATE TABLE toys (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(50) NOT NULL,
-    points INTEGER DEFAULT 0
-);
-
--- Create login_logs table
-CREATE TABLE login_logs (
+CREATE TABLE IF NOT EXISTS login_logs (
     id SERIAL PRIMARY KEY,
     agent_name VARCHAR(50) NOT NULL,
     success BOOLEAN NOT NULL,
@@ -61,32 +22,67 @@ CREATE TABLE login_logs (
     timestamp TIMESTAMP DEFAULT NOW()
 );
 
--- Insert users with new format
-INSERT INTO users (id, firstname, lastname, team, ishere, alias_1, alias_2, passphrase, is_admin) VALUES
-    (1, 'Nikki', 'Thayer', 'red', true, 'Normal', 'Hawk', 'Winter must be cold.', true),
-    (2, 'David', 'Daw', 'blue', true, 'Swift', 'Spider', 'Not every bird is an eagle.', true),
-    (3, 'Bhavna', 'Devani', 'red', true, 'Invisible', 'Mouse', 'Have you ever been to Cleveland in August?', false),
-    (4, 'Peter', 'Munters', 'blue', true, 'Hidden', 'Jewel', 'She wore a green hat by the river.', false),
-    (5, 'Katherine', 'Ramos', 'red', true, 'Exploding', 'Panther', 'A gold room is nothing to sneeze at.', false),
-    (6, 'Dominic', 'Ferantelli', 'blue', true, 'Fast', 'Jaguar', 'Alf ate cats.', false),
-    (7, 'Jane', 'St. John', 'red', true, 'Tranquil', 'Diamond', 'The pope has a dairy allergy.', false),
-    (8, 'Andrew', 'Fernandez', 'blue', true, 'Ominous', 'Lizard', 'Cardboard makes me sleepy.', false),
-    (9, 'Brett', 'Jackson', 'red', true, 'Impossible', 'Dealer', 'The piano has been compromised.', false),
-    (10, 'Richard', 'Malena', 'blue', true, 'Cool', 'Operator', 'The thorn of the blue rose is the sharpest.', false),
-    (11, 'Amanda', 'Rodriguez', 'red', true, 'Drunken', 'Player', 'A knight is nothing without a jester.', false),
-    (12, 'Alex', 'Wawro', 'blue', true, 'Smooth', 'Infiltrator', 'Three birds are better than one.', false);
+CREATE TABLE IF NOT EXISTS sessions (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    participant_user_ids INTEGER[] NOT NULL DEFAULT ARRAY[]::INTEGER[],
+    created_by INTEGER,
+    created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+    started_at TIMESTAMP,
+    paused_at TIMESTAMP,
+    ended_at TIMESTAMP,
+    notes TEXT,
+    current_phase INTEGER DEFAULT 0,
+    CONSTRAINT valid_status CHECK (status IN ('draft', 'active', 'paused', 'ended'))
+);
 
--- Create indexes for better performance
-CREATE INDEX idx_users_alias_1 ON users(alias_1);
-CREATE INDEX idx_users_alias_2 ON users(alias_2);
-CREATE INDEX idx_users_team ON users(team);
-CREATE INDEX idx_users_ishere ON users(ishere);
-CREATE INDEX idx_login_logs_timestamp ON login_logs(timestamp);
-CREATE INDEX idx_login_logs_agent_name ON login_logs(agent_name);
-CREATE INDEX idx_missions_assigned_agent ON missions(assigned_agent);
-CREATE INDEX idx_missions_assigned_now ON missions(assigned_now);
+CREATE TABLE IF NOT EXISTS phase_missions (
+    id SERIAL PRIMARY KEY,
+    phase INTEGER NOT NULL CHECK (phase IN (1, 2, 3)),
+    title TEXT NOT NULL,
+    mission_body TEXT NOT NULL,
+    completion_type VARCHAR(10) NOT NULL CHECK (completion_type IN ('phrase', 'signoff')),
+    success_key TEXT,
+    signoff_prompt_template TEXT,
+    variable_pool JSONB,
+    variable_source VARCHAR(20) DEFAULT 'pool',
+    signer_constraint VARCHAR(20) CHECK (signer_constraint IN ('any', 'new_signer', 'same_signer', 'admin_only')),
+    same_signer_mission_id INTEGER REFERENCES phase_missions(id),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    bounty INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
 
--- Grant permissions (adjust as needed for your setup)
--- GRANT ALL PRIVILEGES ON DATABASE spy_database TO your_user;
--- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO your_user;
--- GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO your_user; 
+CREATE TABLE IF NOT EXISTS player_missions (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES sessions(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    mission_id INTEGER NOT NULL REFERENCES phase_missions(id),
+    variable_value TEXT,
+    completed BOOLEAN DEFAULT false,
+    completed_at TIMESTAMP,
+    signed_off_by INTEGER REFERENCES users(id),
+    signed_off_at TIMESTAMP,
+    phrase_answer TEXT,
+    bounty_paid BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(session_id, user_id, mission_id)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_users_alias_1 ON users(alias_1);
+CREATE INDEX IF NOT EXISTS idx_users_alias_2 ON users(alias_2);
+CREATE INDEX IF NOT EXISTS idx_users_ishere ON users(ishere);
+CREATE INDEX IF NOT EXISTS idx_login_logs_timestamp ON login_logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_login_logs_agent_name ON login_logs(agent_name);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_started_at ON sessions(started_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(status) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_phase_missions_phase ON phase_missions(phase);
+CREATE INDEX IF NOT EXISTS idx_player_missions_session ON player_missions(session_id);
+CREATE INDEX IF NOT EXISTS idx_player_missions_user ON player_missions(user_id);
+CREATE INDEX IF NOT EXISTS idx_player_missions_mission ON player_missions(mission_id);
+CREATE INDEX IF NOT EXISTS idx_player_missions_signoff ON player_missions(signed_off_by);
+CREATE INDEX IF NOT EXISTS idx_player_missions_lookup ON player_missions(session_id, user_id, completed);

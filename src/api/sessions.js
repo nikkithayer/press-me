@@ -280,19 +280,11 @@ export async function endSession(sessionId) {
       WHERE id = ${sessionId}
     `
     
-    // Clear missions for all users (no active session exists now)
-    await clearMissionsForNonSessionUsers()
-    
     return { success: true }
   } catch (error) {
     console.error('Error ending session:', error)
     throw error
   }
-}
-
-// Clear missions for users not in the active session (legacy tables removed)
-export async function clearMissionsForNonSessionUsers() {
-  return { success: true }
 }
 
 // Check if missions can be assigned (only if there's an active session)
@@ -306,7 +298,7 @@ export async function canAssignMissions() {
   }
 }
 
-// Reset a session: clear all mission assignments, completions, and intel for session participants
+// Reset a session: clear all player mission assignments and completions
 // Works for paused or ended sessions (does not require active session)
 export async function resetSession(sessionId) {
   try {
@@ -338,12 +330,6 @@ export async function resetSession(sessionId) {
       DELETE FROM player_missions WHERE session_id = ${sessionId}
     `
 
-    // Clear all agent intel for session users
-    await sql`
-      DELETE FROM agent_intel
-      WHERE agent_id = ANY(${sessionUserIds}::integer[])
-    `
-
     // Reset session status back to 'draft' and clear timestamps and phase
     await sql`
       UPDATE sessions
@@ -357,7 +343,7 @@ export async function resetSession(sessionId) {
 
     return {
       success: true,
-      message: 'Session reset successfully. All missions and intel cleared for participants. Session status reset to draft.'
+      message: 'Session reset successfully. All player missions cleared. Session status reset to draft.'
     }
   } catch (error) {
     console.error('Error resetting session:', error)

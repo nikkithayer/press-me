@@ -31,7 +31,6 @@ export const neonApi = {
   pauseSession: sessions.pauseSession,
   resumeSession: sessions.resumeSession,
   endSession: sessions.endSession,
-  clearMissionsForNonSessionUsers: sessions.clearMissionsForNonSessionUsers,
   canAssignMissions: sessions.canAssignMissions,
   resetSession: sessions.resetSession,
 
