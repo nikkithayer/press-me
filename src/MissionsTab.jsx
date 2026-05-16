@@ -53,9 +53,23 @@ function MissionsTab({ isInActiveSession, missions, currentPhase, completedMissi
                 {compactCompleted.map(mission => (
                   <div
                     key={mission.playerMissionId}
-                    className="mission-card mission-card--completed"
+                    className="mission-card mission-card--completed clickable"
+                    onClick={() => onMissionClick(mission.playerMissionId)}
                   >
-                    <h3>{mission.title}</h3>
+                    <div className="mission-card-completed-row">
+                      <h3>{mission.title}</h3>
+                      {mission.bounty > 0 && (
+                        <span
+                          className={
+                            mission.bountyPaid
+                              ? 'mission-bounty-badge mission-bounty-badge--paid'
+                              : 'mission-bounty-badge mission-bounty-badge--unpaid'
+                          }
+                        >
+                          {mission.bountyPaid ? 'PAID' : 'UNPAID'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
                 {lockedIncomplete.map(mission => (

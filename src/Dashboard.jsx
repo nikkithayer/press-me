@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { neonApi } from './neonApi'
 import { isAdmin } from './utils/admin.js'
@@ -40,6 +40,11 @@ function formatWitnessSignedAt(iso) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function firstNameFromFullName(name) {
+  if (name == null || String(name).trim() === '') return null
+  return String(name).trim().split(/\s+/)[0]
 }
 
 function BriefingModalPanel({ isClosing, onClose, passphrase }) {
@@ -119,6 +124,8 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   const [showMissionFailed, setShowMissionFailed] = useState(false)
   const [missionFailedMessage, setMissionFailedMessage] = useState(null)
   const [completedBounty, setCompletedBounty] = useState(0)
+  const [showBountyPaidStamp, setShowBountyPaidStamp] = useState(false)
+  const bountyPaidCloseTimerRef = useRef(null)
   const [isInActiveSession, setIsInActiveSession] = useState(false)
   const [sessionCheckLoading, setSessionCheckLoading] = useState(true)
 
@@ -269,6 +276,11 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     setSignoffPhase('brief')
     setSignerPassphrase('')
     setSignoffSignedAt(null)
+    setShowBountyPaidStamp(false)
+    if (bountyPaidCloseTimerRef.current != null) {
+      clearTimeout(bountyPaidCloseTimerRef.current)
+      bountyPaidCloseTimerRef.current = null
+    }
   }
 
   const openBriefingModal = () => {
@@ -286,6 +298,10 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   }
 
   const openMissionModal = (missionId) => {
+    if (bountyPaidCloseTimerRef.current != null) {
+      clearTimeout(bountyPaidCloseTimerRef.current)
+      bountyPaidCloseTimerRef.current = null
+    }
     setShowBriefingModal(false)
     setIsBriefingClosing(false)
     setSelectedMissionId(missionId)
@@ -299,6 +315,7 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
     setSignoffPhase('brief')
     setSignerPassphrase('')
     setSignoffSignedAt(null)
+    setShowBountyPaidStamp(false)
 
     const mission = missions.find(m => m.playerMissionId === missionId)
     if (mission?.completionType === 'signoff' && mission.completed) {
@@ -399,8 +416,16 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
       setMissions(prev => prev.map(m =>
         m.playerMissionId === playerMissionId ? { ...m, bountyPaid: true } : m
       ))
-      setCompletedBounty(0)
-      closeMissionModal()
+      setShowBountyPaidStamp(true)
+      if (bountyPaidCloseTimerRef.current != null) {
+        clearTimeout(bountyPaidCloseTimerRef.current)
+      }
+      bountyPaidCloseTimerRef.current = window.setTimeout(() => {
+        bountyPaidCloseTimerRef.current = null
+        setShowBountyPaidStamp(false)
+        setCompletedBounty(0)
+        closeMissionModal()
+      }, 1100)
     } catch (error) {
       console.error('Error marking bounty paid:', error)
     }
@@ -464,6 +489,13 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
   // ── Normal render ──────────────────────────────────────────────────────────
 
   const selectedMission = missions.find(m => m.playerMissionId === selectedMissionId)
+  const bountySignerDisplayName = signoffSuccessSignerName || selectedMission?.signerName
+  const bountyPlayerFirst = firstName || 'You'
+  const bountySignerFirst = firstNameFromFullName(bountySignerDisplayName)
+  const bountyCollectCashLine =
+    selectedMission?.completionType === 'signoff' && bountySignerFirst
+      ? `See ${bountyPlayerFirst} or ${bountySignerFirst} to collect your cash.`
+      : `See ${bountyPlayerFirst} to collect your cash.`
 
   return (
     <div className="dashboard-container">
@@ -637,7 +669,12 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                   </>
                 )}
                 {selectedMission.completionType === 'signoff' && signoffPhase === 'witnessDone' && (
-                  <div className="mission-witness-panel mission-witness-panel--signed">
+                  <div className="mission-witness-panel mission-witness-panel--signed mission-payout-stamp-host">
+                    {showBountyPaidStamp && (
+                      <div className="bounty-paid-stamp-overlay" aria-hidden="true">
+                        <span className="bounty-paid-stamp-mark">PAID</span>
+                      </div>
+                    )}
                     {selectedMission.signoffPromptTemplate && (
                       <div className="mission-signoff-preview mission-signoff-preview--madlib">
                         {renderSignoffMadlibPreview(
@@ -657,13 +694,15 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                     {completedBounty > 0 && !selectedMission.bountyPaid && (
                       <div className="mission-witness-bounty-wrap">
                         <div className="bounty-award">
-                          <p className="bounty-award-text">BONUS AWARDED: {completedBounty} pts</p>
+                          <p className="bounty-award-amount">Bonus awarded: ${completedBounty}!</p>
+                          <p className="bounty-award-lede">{bountyCollectCashLine}</p>
                           <button
                             type="button"
                             className="bounty-paid-button"
+                            disabled={showBountyPaidStamp}
                             onClick={() => handleMarkBountyPaid(selectedMission.playerMissionId)}
                           >
-                            PAID
+                            Mark as paid
                           </button>
                         </div>
                       </div>
@@ -698,16 +737,25 @@ function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, cur
                 <div className="mission-success">
                   <p>Mission success</p>
                   <h2>{selectedMission.title}</h2>
-                  {completedBounty > 0 && (
-                    <div className="bounty-award">
-                      <p className="bounty-award-text">BONUS AWARDED: {completedBounty} pts</p>
-                      <button
-                        type="button"
-                        className="bounty-paid-button"
-                        onClick={() => handleMarkBountyPaid(selectedMission.playerMissionId)}
-                      >
-                        PAID
-                      </button>
+                  {completedBounty > 0 && !selectedMission.bountyPaid && (
+                    <div className="mission-phrase-payout-shell mission-payout-stamp-host">
+                      {showBountyPaidStamp && (
+                        <div className="bounty-paid-stamp-overlay" aria-hidden="true">
+                          <span className="bounty-paid-stamp-mark">PAID</span>
+                        </div>
+                      )}
+                      <div className="bounty-award">
+                        <p className="bounty-award-amount">Bonus awarded: ${completedBounty}!</p>
+                        <p className="bounty-award-lede">{bountyCollectCashLine}</p>
+                        <button
+                          type="button"
+                          className="bounty-paid-button"
+                          disabled={showBountyPaidStamp}
+                          onClick={() => handleMarkBountyPaid(selectedMission.playerMissionId)}
+                        >
+                          Mark as paid
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
