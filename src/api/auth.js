@@ -107,6 +107,7 @@ export async function authenticate(alias, passphrase, ipAddress, userAgent) {
           alias_1: user.alias_1,
           alias_2: user.alias_2,
           codename: `${user.alias_1} ${user.alias_2}`,
+          passphrase: user.passphrase,
           is_admin: user.is_admin || false
         }
       };
@@ -233,6 +234,7 @@ export async function authenticateAdmin(name, passphrase, ipAddress, userAgent) 
           alias_1: user.alias_1,
           alias_2: user.alias_2,
           codename: `${user.alias_1} ${user.alias_2}`,
+          passphrase: user.passphrase,
           is_admin: user.is_admin || false
         }
       };

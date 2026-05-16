@@ -53,7 +53,6 @@ function App() {
           element={
             isLoggedIn ? (
               <Dashboard 
-                agentName={currentUser?.codename}
                 agentId={currentUser?.id}
                 firstName={currentUser?.firstname}
                 lastName={currentUser?.lastname}

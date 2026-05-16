@@ -509,12 +509,36 @@
   font-weight: 400;
 }
 
-.agent-card span {
-  margin-right: var(--unit-xs);
-  font-size: 1.25em;
-  padding: 0 var(--unit-xs);
+.passphrase-field {
+  display: flex;
+  align-items: center;
+  gap: var(--unit-sm);
+  margin-top: var(--unit-sm);
 }
 
+.passphrase-value {
+  flex: 1;
+  font-family: 'Barlow Condensed', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1.25em;
+  text-transform: uppercase;
+  padding: var(--unit-xs) var(--unit-sm);
+  transition: all 0.3s;
+  min-height: 1.5em;
+  line-height: 1.5;
+}
+
+.passphrase-value.concealed {
+  color: transparent;
+  background-color: var(--white);
+  border: 1px solid var(--white);
+  user-select: none;
+}
+
+.passphrase-value.revealed {
+  color: var(--white);
+  background-color: var(--black);
+  border: 1px solid var(--green);
+}
 
 .field-group {
   margin-bottom: var(--unit-sm);

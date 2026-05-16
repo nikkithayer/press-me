@@ -1,25 +1,32 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { neonApi } from './neonApi'
 import { isAdmin } from './utils/admin.js'
 
-function AgentTab({ agentName, firstName, lastName, currentUser, onLogout }) {
+function AgentTab({ currentUser, onLogout }) {
   const navigate = useNavigate()
-  const [agentNameVisible, setAgentNameVisible] = useState(false)
-  const [realNameVisible, setRealNameVisible] = useState(false)
+  const [passphraseVisible, setPassphraseVisible] = useState(false)
+  const [passphrase, setPassphrase] = useState(currentUser?.passphrase || null)
 
   useEffect(() => {
-    if (agentNameVisible) {
-      const timer = setTimeout(() => setAgentNameVisible(false), 3000)
-      return () => clearTimeout(timer)
+    if (!passphrase && currentUser?.id) {
+      neonApi.getUserPassphrase(currentUser.id).then(p => {
+        if (p) {
+          setPassphrase(p)
+          const stored = JSON.parse(localStorage.getItem('spyUser') || '{}')
+          stored.passphrase = p
+          localStorage.setItem('spyUser', JSON.stringify(stored))
+        }
+      }).catch(() => {})
     }
-  }, [agentNameVisible])
+  }, [currentUser?.id, passphrase])
 
   useEffect(() => {
-    if (realNameVisible) {
-      const timer = setTimeout(() => setRealNameVisible(false), 3000)
+    if (passphraseVisible) {
+      const timer = setTimeout(() => setPassphraseVisible(false), 5000)
       return () => clearTimeout(timer)
     }
-  }, [realNameVisible])
+  }, [passphraseVisible])
 
   const EyeOpen = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -37,28 +44,16 @@ function AgentTab({ agentName, firstName, lastName, currentUser, onLogout }) {
     <div className="tab-content">
       <div className="agent-card">
         <h3>Classified</h3>
-        <h4>Reveal to trusted associates only</h4>
+        <h4>Your passphrase</h4>
 
-        <div className="field-group">
-          <div className="field-label">Agent</div>
-          <div className={`field-row ${agentNameVisible ? 'visible' : 'hidden'}`}>
-            <span>{agentName}</span>
-            <button onClick={() => setAgentNameVisible(!agentNameVisible)} className="toggle-button">
-              {agentNameVisible ? <EyeOpen /> : <EyeClosed />}
-              <span className="button-text">{agentNameVisible ? 'hide' : 'reveal'}</span>
-            </button>
+        <div className="passphrase-field">
+          <div className={`passphrase-value ${passphraseVisible ? 'revealed' : 'concealed'}`}>
+            {passphrase || '...'}
           </div>
-        </div>
-
-        <div className="field-group">
-          <div className="field-label">AKA</div>
-          <div className={`field-row ${realNameVisible ? 'visible' : 'hidden'}`}>
-            <span>{firstName} {lastName}</span>
-            <button onClick={() => setRealNameVisible(!realNameVisible)} className="toggle-button">
-              {realNameVisible ? <EyeOpen /> : <EyeClosed />}
-              <span className="button-text">{realNameVisible ? 'hide' : 'reveal'}</span>
-            </button>
-          </div>
+          <button onClick={() => setPassphraseVisible(!passphraseVisible)} className="toggle-button">
+            {passphraseVisible ? <EyeOpen /> : <EyeClosed />}
+            <span className="button-text">{passphraseVisible ? 'hide' : 'reveal'}</span>
+          </button>
         </div>
       </div>
 

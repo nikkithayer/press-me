@@ -12,6 +12,7 @@ export const neonApi = {
   // Users
   getUsers: users.getUsers,
   getUserScore: users.getUserScore,
+  getUserPassphrase: users.getUserPassphrase,
   createUser: users.createUser,
   
   // Auth

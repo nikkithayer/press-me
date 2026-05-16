@@ -3,7 +3,7 @@ import { neonApi } from './neonApi'
 import AgentTab from './AgentTab'
 import MissionsTab from './MissionsTab'
 
-function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, onLogout, currentUser }) {
+function Dashboard({ agentId, firstName, lastName, alias1, alias2, onLogout, currentUser }) {
   const [missions, setMissions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -328,9 +328,6 @@ function Dashboard({ agentName, agentId, firstName, lastName, alias1, alias2, on
       <div className={`dashboard-content dashboard-content-${activeTab}`}>
         {activeTab === 'agent' && (
           <AgentTab
-            agentName={agentName}
-            firstName={firstName}
-            lastName={lastName}
             currentUser={currentUser}
             onLogout={onLogout}
           />

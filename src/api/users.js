@@ -31,6 +31,17 @@ export async function createUser({ firstname, lastname, alias_1, alias_2, passph
   }
 }
 
+// Get a user's passphrase by ID
+export async function getUserPassphrase(userId) {
+  try {
+    const result = await sql`SELECT passphrase FROM users WHERE id = ${userId}`
+    return result[0]?.passphrase || null
+  } catch (error) {
+    console.error('Error fetching user passphrase:', error)
+    throw error
+  }
+}
+
 // Get user score
 export async function getUserScore(userId) {
   try {
