@@ -135,6 +135,13 @@ function AdminDashboard({ currentUser, onLogout }) {
   const [phaseMissions, setPhaseMissions] = useState([])
   const [loadingPhaseMissions, setLoadingPhaseMissions] = useState(false)
 
+  // Add user state
+  const [showAddUserModal, setShowAddUserModal] = useState(false)
+  const [addingUser, setAddingUser] = useState(false)
+  const [newUserForm, setNewUserForm] = useState({
+    firstname: '', lastname: '', alias_1: '', alias_2: '', passphrase: '', is_admin: false
+  })
+
   // Check if user is admin
   const userIsAdmin = isAdmin(currentUser)
 
@@ -534,6 +541,25 @@ function AdminDashboard({ currentUser, onLogout }) {
     }
   }
 
+  const handleAddUser = async () => {
+    const { firstname, lastname, alias_1, alias_2, passphrase } = newUserForm
+    if (!firstname || !lastname || !alias_1 || !alias_2 || !passphrase) {
+      alert('All fields are required.')
+      return
+    }
+    try {
+      setAddingUser(true)
+      await neonApi.createUser(newUserForm)
+      setShowAddUserModal(false)
+      setNewUserForm({ firstname: '', lastname: '', alias_1: '', alias_2: '', passphrase: '', is_admin: false })
+      alert(`User ${firstname} ${lastname} created!`)
+    } catch (error) {
+      alert(`Error creating user: ${error.message || 'Please try again.'}`)
+    } finally {
+      setAddingUser(false)
+    }
+  }
+
   if (!userIsAdmin) {
     return null
   }
@@ -561,6 +587,9 @@ function AdminDashboard({ currentUser, onLogout }) {
             </button>
             <button onClick={handleOpenMissionManager} className="button-secondary">
               Manage Missions
+            </button>
+            <button onClick={() => setShowAddUserModal(true)} className="button-secondary">
+              Add User
             </button>
           </div>
 
@@ -1200,6 +1229,88 @@ function AdminDashboard({ currentUser, onLogout }) {
                 style={{ backgroundColor: '#4CAF50' }}
               >
                 Complete Mission
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddUserModal && (
+        <div className="admin-modal-overlay" onClick={() => setShowAddUserModal(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h2>Add User</h2>
+              <button className="admin-modal-close" onClick={() => setShowAddUserModal(false)}>x</button>
+            </div>
+            <div className="admin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="admin-form-group">
+                <label>First Name</label>
+                <input
+                  type="text"
+                  value={newUserForm.firstname}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, firstname: e.target.value })}
+                  placeholder="First name"
+                  disabled={addingUser}
+                />
+              </div>
+              <div className="admin-form-group">
+                <label>Last Name</label>
+                <input
+                  type="text"
+                  value={newUserForm.lastname}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, lastname: e.target.value })}
+                  placeholder="Last name"
+                  disabled={addingUser}
+                />
+              </div>
+              <div className="admin-form-group">
+                <label>Alias 1</label>
+                <input
+                  type="text"
+                  value={newUserForm.alias_1}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, alias_1: e.target.value })}
+                  placeholder="First alias word"
+                  disabled={addingUser}
+                />
+              </div>
+              <div className="admin-form-group">
+                <label>Alias 2</label>
+                <input
+                  type="text"
+                  value={newUserForm.alias_2}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, alias_2: e.target.value })}
+                  placeholder="Second alias word"
+                  disabled={addingUser}
+                />
+              </div>
+              <div className="admin-form-group">
+                <label>Passphrase</label>
+                <input
+                  type="text"
+                  value={newUserForm.passphrase}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, passphrase: e.target.value })}
+                  placeholder="Login passphrase"
+                  disabled={addingUser}
+                />
+              </div>
+              <div className="admin-form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={newUserForm.is_admin}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, is_admin: e.target.checked })}
+                    disabled={addingUser}
+                  />
+                  Admin
+                </label>
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button className="button-secondary" onClick={() => setShowAddUserModal(false)} disabled={addingUser}>
+                Cancel
+              </button>
+              <button className="button-primary" onClick={handleAddUser} disabled={addingUser}>
+                {addingUser ? 'Creating...' : 'Create User'}
               </button>
             </div>
           </div>

@@ -11,6 +11,26 @@ export async function getUsers() {
   }
 }
 
+// Create a new user
+export async function createUser({ firstname, lastname, alias_1, alias_2, passphrase, is_admin = false }) {
+  try {
+    const result = await sql`
+      INSERT INTO users (id, firstname, lastname, team, ishere, alias_1, alias_2, passphrase, is_admin, score)
+      VALUES (
+        (SELECT COALESCE(MAX(id), 0) + 1 FROM users),
+        ${firstname}, ${lastname}, 'none', true,
+        ${alias_1}, ${alias_2}, ${passphrase},
+        ${is_admin}, 0
+      )
+      RETURNING id, firstname, lastname, alias_1, alias_2, ishere, is_admin
+    `
+    return result[0]
+  } catch (error) {
+    console.error('Error creating user:', error)
+    throw error
+  }
+}
+
 // Get user score
 export async function getUserScore(userId) {
   try {
