@@ -1,5 +1,4 @@
 import { sql } from './db.js';
-import { assignMissionsToSessionUsers } from './assignments.js';
 import { assignPhaseToPlayers } from './phaseMissions.js';
 
 // Get all sessions
@@ -291,90 +290,9 @@ export async function endSession(sessionId) {
   }
 }
 
-// Clear missions for users not in the active session
+// Clear missions for users not in the active session (legacy tables removed)
 export async function clearMissionsForNonSessionUsers() {
-  try {
-    const activeSession = await getActiveSession()
-    
-    if (!activeSession) {
-      // No active session - clear missions for all users
-      await sql`
-        UPDATE book_missions
-        SET assigned_red = NULL,
-            assigned_blue = NULL,
-            previous_reds = ARRAY[]::integer[],
-            previous_blues = ARRAY[]::integer[],
-            red_completed = false,
-            blue_completed = false
-      `
-      
-      await sql`
-        UPDATE passphrase_missions
-        SET assigned_receiver = NULL,
-            assigned_sender_1 = NULL,
-            assigned_sender_2 = NULL,
-            previous_receivers = ARRAY[]::integer[],
-            previous_senders = ARRAY[]::integer[],
-            completed = false
-      `
-      
-      await sql`
-        UPDATE object_missions
-        SET assigned_agent = NULL,
-            past_assigned_agents = ARRAY[]::integer[],
-            assigned_now = false,
-            completed = false
-      `
-      
-      return { success: true, cleared: 'all' }
-    }
-    
-    // Clear missions for users NOT in the active session
-    const sessionUserIds = activeSession.participant_user_ids || []
-    const allUsers = (await sql`SELECT id FROM users WHERE ishere = true`).map(u => u.id)
-    const nonSessionUsers = allUsers.filter(id => !sessionUserIds.includes(id))
-    
-    if (nonSessionUsers.length === 0) {
-      return { success: true, cleared: 'none' }
-    }
-    
-    // Clear book missions
-    await sql`
-      UPDATE book_missions
-      SET assigned_red = CASE WHEN assigned_red = ANY(${nonSessionUsers}::integer[]) THEN NULL ELSE assigned_red END,
-          assigned_blue = CASE WHEN assigned_blue = ANY(${nonSessionUsers}::integer[]) THEN NULL ELSE assigned_blue END,
-          previous_reds = array(SELECT unnest(previous_reds) EXCEPT SELECT unnest(${nonSessionUsers}::integer[])),
-          previous_blues = array(SELECT unnest(previous_blues) EXCEPT SELECT unnest(${nonSessionUsers}::integer[]))
-      WHERE assigned_red = ANY(${nonSessionUsers}::integer[]) OR assigned_blue = ANY(${nonSessionUsers}::integer[])
-    `
-    
-    // Clear passphrase missions
-    await sql`
-      UPDATE passphrase_missions
-      SET assigned_receiver = CASE WHEN assigned_receiver = ANY(${nonSessionUsers}::integer[]) THEN NULL ELSE assigned_receiver END,
-          assigned_sender_1 = CASE WHEN assigned_sender_1 = ANY(${nonSessionUsers}::integer[]) THEN NULL ELSE assigned_sender_1 END,
-          assigned_sender_2 = CASE WHEN assigned_sender_2 = ANY(${nonSessionUsers}::integer[]) THEN NULL ELSE assigned_sender_2 END,
-          previous_receivers = array(SELECT unnest(previous_receivers) EXCEPT SELECT unnest(${nonSessionUsers}::integer[])),
-          previous_senders = array(SELECT unnest(previous_senders) EXCEPT SELECT unnest(${nonSessionUsers}::integer[]))
-      WHERE assigned_receiver = ANY(${nonSessionUsers}::integer[]) 
-         OR assigned_sender_1 = ANY(${nonSessionUsers}::integer[])
-         OR assigned_sender_2 = ANY(${nonSessionUsers}::integer[])
-    `
-    
-    // Clear object missions
-    await sql`
-      UPDATE object_missions
-      SET assigned_agent = CASE WHEN assigned_agent = ANY(${nonSessionUsers}::integer[]) THEN NULL ELSE assigned_agent END,
-          past_assigned_agents = array(SELECT unnest(past_assigned_agents) EXCEPT SELECT unnest(${nonSessionUsers}::integer[])),
-          assigned_now = CASE WHEN assigned_agent = ANY(${nonSessionUsers}::integer[]) THEN false ELSE assigned_now END
-      WHERE assigned_agent = ANY(${nonSessionUsers}::integer[])
-    `
-    
-    return { success: true, cleared: nonSessionUsers.length }
-  } catch (error) {
-    console.error('Error clearing missions for non-session users:', error)
-    throw error
-  }
+  return { success: true }
 }
 
 // Check if missions can be assigned (only if there's an active session)
@@ -414,72 +332,6 @@ export async function resetSession(sessionId) {
     if (sessionUserIds.length === 0) {
       throw new Error('No participants in session')
     }
-    
-    // Clear all mission assignments, completions, and history for session users
-    // Reset book missions for session users
-    await sql`
-      UPDATE book_missions
-      SET assigned_red = CASE WHEN assigned_red = ANY(${sessionUserIds}::integer[]) THEN NULL ELSE assigned_red END,
-          assigned_blue = CASE WHEN assigned_blue = ANY(${sessionUserIds}::integer[]) THEN NULL ELSE assigned_blue END,
-          red_completed = CASE WHEN assigned_red = ANY(${sessionUserIds}::integer[]) THEN false ELSE red_completed END,
-          blue_completed = CASE WHEN assigned_blue = ANY(${sessionUserIds}::integer[]) THEN false ELSE blue_completed END,
-          previous_reds = ARRAY(
-            SELECT unnest(COALESCE(previous_reds, ARRAY[]::integer[]))
-            EXCEPT
-            SELECT unnest(${sessionUserIds}::integer[])
-          ),
-          previous_blues = ARRAY(
-            SELECT unnest(COALESCE(previous_blues, ARRAY[]::integer[]))
-            EXCEPT
-            SELECT unnest(${sessionUserIds}::integer[])
-          )
-      WHERE assigned_red = ANY(${sessionUserIds}::integer[]) 
-         OR assigned_blue = ANY(${sessionUserIds}::integer[])
-         OR previous_reds && ${sessionUserIds}::integer[]
-         OR previous_blues && ${sessionUserIds}::integer[]
-    `
-    
-    // Reset passphrase missions for session users
-    await sql`
-      UPDATE passphrase_missions
-      SET assigned_receiver = CASE WHEN assigned_receiver = ANY(${sessionUserIds}::integer[]) THEN NULL ELSE assigned_receiver END,
-          assigned_sender_1 = CASE WHEN assigned_sender_1 = ANY(${sessionUserIds}::integer[]) THEN NULL ELSE assigned_sender_1 END,
-          assigned_sender_2 = CASE WHEN assigned_sender_2 = ANY(${sessionUserIds}::integer[]) THEN NULL ELSE assigned_sender_2 END,
-          completed = CASE WHEN assigned_receiver = ANY(${sessionUserIds}::integer[]) 
-                            OR assigned_sender_1 = ANY(${sessionUserIds}::integer[])
-                            OR assigned_sender_2 = ANY(${sessionUserIds}::integer[])
-                       THEN false ELSE completed END,
-          previous_receivers = ARRAY(
-            SELECT unnest(COALESCE(previous_receivers, ARRAY[]::integer[]))
-            EXCEPT
-            SELECT unnest(${sessionUserIds}::integer[])
-          ),
-          previous_senders = ARRAY(
-            SELECT unnest(COALESCE(previous_senders, ARRAY[]::integer[]))
-            EXCEPT
-            SELECT unnest(${sessionUserIds}::integer[])
-          )
-      WHERE assigned_receiver = ANY(${sessionUserIds}::integer[]) 
-         OR assigned_sender_1 = ANY(${sessionUserIds}::integer[])
-         OR assigned_sender_2 = ANY(${sessionUserIds}::integer[])
-         OR previous_receivers && ${sessionUserIds}::integer[]
-         OR previous_senders && ${sessionUserIds}::integer[]
-    `
-    
-    // Reset object missions for session users
-    await sql`
-      UPDATE object_missions
-      SET assigned_agent = CASE WHEN assigned_agent = ANY(${sessionUserIds}::integer[]) THEN NULL ELSE assigned_agent END,
-          assigned_now = CASE WHEN assigned_agent = ANY(${sessionUserIds}::integer[]) THEN false ELSE assigned_now END,
-          completed = CASE WHEN assigned_agent = ANY(${sessionUserIds}::integer[]) THEN false ELSE completed END,
-          past_assigned_agents = ARRAY(
-            SELECT unnest(COALESCE(past_assigned_agents, ARRAY[]::integer[]))
-            EXCEPT
-            SELECT unnest(${sessionUserIds}::integer[])
-          )
-      WHERE assigned_agent = ANY(${sessionUserIds}::integer[])
-         OR past_assigned_agents && ${sessionUserIds}::integer[]
-    `
     
     // Clear player_missions for this session
     await sql`
